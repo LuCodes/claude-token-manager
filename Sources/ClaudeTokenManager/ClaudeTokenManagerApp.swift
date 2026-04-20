@@ -34,13 +34,13 @@ struct MenuBarLabel: View {
     @EnvironmentObject var store: UsageStore
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 3) {
             Image(nsImage: loadMenuBarIcon())
                 .resizable()
                 .scaledToFit()
-                .frame(width: 13, height: 13)
+                .frame(width: 11, height: 11)
             Text(labelText)
-                .font(AppFont.inter(size: 11, weight: .medium))
+                .font(AppFont.inter(size: 10, weight: .medium))
                 .monospacedDigit()
         }
         .foregroundColor(labelColor)
