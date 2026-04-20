@@ -4,14 +4,19 @@ import ClaudeTokenManagerCore
 struct PreferencesView: View {
     @EnvironmentObject var store: UsageStore
     @Binding var isOpen: Bool
+    @State private var budgetText: String = ""
+
+    private let tintBlue = Color(red: 55/255, green: 138/255, blue: 221/255)
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
             Spacer().frame(height: 14)
-            launchAtLoginCard
+            displayFormatCard
             Spacer().frame(height: 10)
-            notificationsCard
+            budgetCard
+            Spacer().frame(height: 10)
+            launchAtLoginCard
             Spacer().frame(height: 10)
             infoCard
             Spacer().frame(height: 14)
@@ -19,7 +24,14 @@ struct PreferencesView: View {
             Spacer().frame(height: 10)
             footer
         }
+        .onAppear {
+            if let v = store.dailyBudgetValue {
+                budgetText = String(format: "%.0f", v)
+            }
+        }
     }
+
+    // MARK: - Header
 
     private var header: some View {
         HStack {
@@ -27,25 +39,103 @@ struct PreferencesView: View {
                 HStack(spacing: 4) {
                     Image(systemName: "chevron.left").font(.system(size: 11, weight: .medium))
                     Text("Retour").font(AppFont.inter(size: 12))
-                }
-                .foregroundColor(.white.opacity(0.7))
-            }
-            .buttonStyle(.plain)
+                }.foregroundColor(.white.opacity(0.7))
+            }.buttonStyle(.plain)
             Spacer()
-            Text("Préférences")
+            Text("Pr\u{00E9}f\u{00E9}rences")
                 .font(AppFont.inter(size: 13, weight: .medium))
             Spacer()
             Spacer().frame(width: 56)
         }
     }
 
+    // MARK: - Display format
+
+    private var displayFormatCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Format d'affichage")
+                .font(AppFont.inter(size: 12, weight: .medium))
+            Picker("", selection: $store.displayFormat) {
+                ForEach(DisplayFormat.allCases, id: \.self) { fmt in
+                    Text(fmt.label).tag(fmt)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            Text("Affiche les co\u{00FB}ts ou les tokens bruts partout dans l'app")
+                .font(AppFont.inter(size: 10))
+                .foregroundColor(.white.opacity(0.4))
+        }
+        .padding(.horizontal, 12).padding(.vertical, 10)
+        .background(Color.white.opacity(0.04))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+
+    // MARK: - Budget
+
+    private var budgetCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("Budget quotidien")
+                    .font(AppFont.inter(size: 12, weight: .medium))
+                Spacer()
+                HStack(spacing: 2) {
+                    Text(store.dailyBudgetIsMoney ? "$" : "tk")
+                        .font(AppFont.inter(size: 10))
+                        .foregroundColor(.white.opacity(0.4))
+                    TextField("", text: $budgetText)
+                        .font(AppFont.inter(size: 12))
+                        .textFieldStyle(.plain)
+                        .frame(width: 60)
+                        .padding(.horizontal, 8).padding(.vertical, 4)
+                        .background(Color.white.opacity(0.06))
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                        .onChange(of: budgetText) { newValue in
+                            if newValue.isEmpty {
+                                store.dailyBudgetValue = nil
+                            } else if let v = Double(newValue), v > 0 {
+                                store.dailyBudgetValue = v
+                            }
+                        }
+                }
+            }
+            HStack(spacing: 12) {
+                budgetTypeButton(label: "$", isMoney: true)
+                budgetTypeButton(label: "tokens", isMoney: false)
+            }
+            Text("Te pr\u{00E9}viens \u{00E0} 80 % et 95 % de ton budget. Laisser vide pour d\u{00E9}sactiver.")
+                .font(AppFont.inter(size: 10))
+                .foregroundColor(.white.opacity(0.4))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.horizontal, 12).padding(.vertical, 10)
+        .background(Color.white.opacity(0.04))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+
+    private func budgetTypeButton(label: String, isMoney: Bool) -> some View {
+        Button(action: { store.dailyBudgetIsMoney = isMoney }) {
+            HStack(spacing: 4) {
+                Circle()
+                    .fill(store.dailyBudgetIsMoney == isMoney ? tintBlue : Color.white.opacity(0.15))
+                    .frame(width: 8, height: 8)
+                Text(label)
+                    .font(AppFont.inter(size: 11))
+                    .foregroundColor(store.dailyBudgetIsMoney == isMoney ? .white : .white.opacity(0.5))
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - Launch at login
+
     private var launchAtLoginCard: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("Lancer au démarrage")
+                    Text("Lancer au d\u{00E9}marrage")
                         .font(AppFont.inter(size: 12, weight: .medium))
-                    Text("L'icône apparaîtra dans la barre de menu à chaque ouverture de session")
+                    Text("L'ic\u{00F4}ne appara\u{00EE}tra dans la barre de menu \u{00E0} chaque ouverture de session")
                         .font(AppFont.inter(size: 10))
                         .foregroundColor(.white.opacity(0.5))
                 }
@@ -54,85 +144,49 @@ struct PreferencesView: View {
                     .labelsHidden()
                     .toggleStyle(.switch)
                     .controlSize(.small)
-                    .tint(Color(red: 55/255, green: 138/255, blue: 221/255))
+                    .tint(tintBlue)
                     .onChange(of: store.launchAtLoginEnabled) { newValue in
                         LoginItem.setEnabled(newValue)
                     }
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 12).padding(.vertical, 10)
         .background(Color.white.opacity(0.04))
         .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 
-    private var notificationsCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Alertes à 80 % et 95 %")
-                        .font(AppFont.inter(size: 12, weight: .medium))
-                    Text("Notification discrète quand une limite approche")
-                        .font(AppFont.inter(size: 10))
-                        .foregroundColor(.white.opacity(0.5))
-                }
-                Spacer()
-                Toggle("", isOn: $store.notificationsEnabled)
-                    .labelsHidden()
-                    .toggleStyle(.switch)
-                    .controlSize(.small)
-                    .tint(Color(red: 55/255, green: 138/255, blue: 221/255))
-            }
-
-            if store.notificationsEnabled {
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(Color(red: 239/255, green: 159/255, blue: 39/255))
-                        .frame(width: 6, height: 6)
-                    Text("80 % : premier avertissement")
-                        .font(AppFont.inter(size: 10))
-                        .foregroundColor(.white.opacity(0.55))
-                }
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(Color(red: 216/255, green: 90/255, blue: 48/255))
-                        .frame(width: 6, height: 6)
-                    Text("95 % : limite presque atteinte")
-                        .font(AppFont.inter(size: 10))
-                        .foregroundColor(.white.opacity(0.55))
-                }
-                Text("Une seule notification par palier et par période de reset.")
-                    .font(AppFont.inter(size: 10))
-                    .foregroundColor(.white.opacity(0.35))
-                    .padding(.top, 2)
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .background(Color.white.opacity(0.04))
-        .clipShape(RoundedRectangle(cornerRadius: 10))
-    }
+    // MARK: - Info card
 
     private var infoCard: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text("Source des données")
-                    .font(AppFont.inter(size: 11, weight: .medium))
-                Spacer()
-            }
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Source des donn\u{00E9}es")
+                .font(AppFont.inter(size: 11, weight: .medium))
             Text("Logs locaux de Claude Code (~/.claude/projects)")
                 .font(AppFont.inter(size: 10))
                 .foregroundColor(.white.opacity(0.5))
-            Text("Les pourcentages sont relatifs à vos pics d'utilisation sur les 30 derniers jours.")
+            Text("Les chiffres sont mesur\u{00E9}s depuis tes logs Claude Code. Les co\u{00FB}ts sont calcul\u{00E9}s aux tarifs API Anthropic. Si tu es en abonnement Pro/Max, ton co\u{00FB}t r\u{00E9}el est le prix fixe de ton forfait.")
                 .font(AppFont.inter(size: 10))
-                .foregroundColor(.white.opacity(0.4))
+                .foregroundColor(.white.opacity(0.35))
                 .fixedSize(horizontal: false, vertical: true)
+
+            Button(action: {
+                if let url = URL(string: "https://claude.ai/settings/usage") {
+                    NSWorkspace.shared.open(url)
+                }
+            }) {
+                Text("Ouvrir claude.ai pour voir mes limites de forfait \u{2192}")
+                    .font(AppFont.inter(size: 10, weight: .medium))
+                    .foregroundColor(tintBlue)
+            }
+            .buttonStyle(.plain)
+            .padding(.top, 2)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 12).padding(.vertical, 10)
         .background(Color.white.opacity(0.04))
         .clipShape(RoundedRectangle(cornerRadius: 10))
     }
+
+    // MARK: - Footer
 
     private var footer: some View {
         HStack {
@@ -141,13 +195,13 @@ struct PreferencesView: View {
                     .font(AppFont.inter(size: 10))
                     .foregroundColor(.white.opacity(0.4))
             } else {
-                Link("Installer Inter pour une meilleure typographie",
+                Link("Installer Inter",
                      destination: URL(string: "https://rsms.me/inter/")!)
                     .font(AppFont.inter(size: 10))
-                    .foregroundColor(Color(red: 55/255, green: 138/255, blue: 221/255))
+                    .foregroundColor(tintBlue)
             }
             Spacer()
-            Text("v0.1.1")
+            Text("v0.2.0")
                 .font(AppFont.inter(size: 10))
                 .foregroundColor(.white.opacity(0.3))
         }
