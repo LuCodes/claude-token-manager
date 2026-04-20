@@ -1,6 +1,27 @@
 import SwiftUI
 import ClaudeTokenManagerCore
 
+// MARK: - Card style modifier
+
+private struct PreferenceCardStyle: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.white.opacity(0.04))
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+}
+
+extension View {
+    fileprivate func preferenceCard() -> some View {
+        self.modifier(PreferenceCardStyle())
+    }
+}
+
+// MARK: - PreferencesView
+
 struct PreferencesView: View {
     @EnvironmentObject var store: UsageStore
     @Binding var isOpen: Bool
@@ -12,19 +33,13 @@ struct PreferencesView: View {
     private let tintBlue = Color(red: 55/255, green: 138/255, blue: 221/255)
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: 10) {
             header
-            Spacer().frame(height: 14)
             budgetCard
-            Spacer().frame(height: 10)
             launchAtLoginCard
-            Spacer().frame(height: 10)
             claudeAISyncCard
-            Spacer().frame(height: 10)
             infoCard
-            Spacer().frame(height: 14)
             Divider().background(Color.white.opacity(0.08))
-            Spacer().frame(height: 10)
             footer
         }
         .onAppear {
@@ -67,38 +82,31 @@ struct PreferencesView: View {
                 step: 1
             )
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 14)
-        .background(Color.white.opacity(0.04))
-        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .preferenceCard()
     }
 
     // MARK: - Launch at login
 
     private var launchAtLoginCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Launch at login")
-                        .font(AppFont.inter(size: 12, weight: .medium))
-                    Text("The icon will appear in the menu bar on every login")
-                        .font(AppFont.inter(size: 10))
-                        .foregroundColor(.white.opacity(0.5))
-                }
-                Spacer()
-                Toggle("", isOn: $store.launchAtLoginEnabled)
-                    .labelsHidden()
-                    .toggleStyle(.switch)
-                    .controlSize(.small)
-                    .tint(tintBlue)
-                    .onChange(of: store.launchAtLoginEnabled) { newValue in
-                        LoginItem.setEnabled(newValue)
-                    }
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Launch at login")
+                    .font(AppFont.inter(size: 12, weight: .medium))
+                Text("The icon will appear in the menu bar on every login")
+                    .font(AppFont.inter(size: 10))
+                    .foregroundColor(.white.opacity(0.5))
             }
+            Spacer()
+            Toggle("", isOn: $store.launchAtLoginEnabled)
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .controlSize(.small)
+                .tint(tintBlue)
+                .onChange(of: store.launchAtLoginEnabled) { newValue in
+                    LoginItem.setEnabled(newValue)
+                }
         }
-        .padding(.horizontal, 12).padding(.vertical, 10)
-        .background(Color.white.opacity(0.04))
-        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .preferenceCard()
     }
 
     // MARK: - Claude.ai sync
@@ -129,12 +137,8 @@ struct PreferencesView: View {
                 Divider().background(Color.white.opacity(0.1))
 
                 if ClaudeAIDataSource.hasStoredCredentials() &&
-                   store.claudeAIConnectionStatus == .connected {
-                    if isEditing {
-                        credentialsForm
-                    } else {
-                        connectedView
-                    }
+                   store.claudeAIConnectionStatus == .connected && !isEditing {
+                    connectedView
                 } else {
                     credentialsForm
                 }
@@ -149,9 +153,7 @@ struct PreferencesView: View {
                 }
             }
         }
-        .padding(.horizontal, 12).padding(.vertical, 10)
-        .background(Color.white.opacity(0.04))
-        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .preferenceCard()
     }
 
     private var credentialsForm: some View {
@@ -237,12 +239,10 @@ struct PreferencesView: View {
                     .foregroundColor(.white.opacity(0.85))
             }
             Spacer()
-            Button("Edit") {
-                isEditing = true
-            }
-            .buttonStyle(.plain)
-            .font(AppFont.inter(size: 10))
-            .foregroundColor(.white.opacity(0.5))
+            Button("Edit") { isEditing = true }
+                .buttonStyle(.plain)
+                .font(AppFont.inter(size: 10))
+                .foregroundColor(.white.opacity(0.5))
 
             Button("Disconnect") {
                 store.clearClaudeAICredentials()
@@ -318,9 +318,7 @@ struct PreferencesView: View {
             .buttonStyle(.plain)
             .padding(.top, 2)
         }
-        .padding(.horizontal, 12).padding(.vertical, 10)
-        .background(Color.white.opacity(0.04))
-        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .preferenceCard()
     }
 
     // MARK: - Footer
@@ -331,9 +329,13 @@ struct PreferencesView: View {
                 .font(AppFont.inter(size: 10))
                 .foregroundColor(.white.opacity(0.4))
             Spacer()
-            Text("v1.4.0")
+            Text("v\(appVersion)")
                 .font(AppFont.inter(size: 10))
                 .foregroundColor(.white.opacity(0.3))
         }
+    }
+
+    private var appVersion: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?.?.?"
     }
 }
