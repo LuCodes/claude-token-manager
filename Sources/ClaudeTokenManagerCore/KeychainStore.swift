@@ -59,6 +59,27 @@ public enum KeychainStore {
         }
     }
 
+    /// Store a string with restrictive accessibility (ThisDeviceOnly, no backups).
+    /// Use this for sensitive credentials like session cookies.
+    public static func setSensitive(_ value: String, for key: String) throws {
+        let data = value.data(using: .utf8) ?? Data()
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: key
+        ]
+        SecItemDelete(query as CFDictionary)
+
+        var addQuery = query
+        addQuery[kSecValueData as String] = data
+        addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+
+        let status = SecItemAdd(addQuery as CFDictionary, nil)
+        guard status == errSecSuccess else {
+            throw KeychainError.unhandled(status: status)
+        }
+    }
+
     public enum KeychainError: Error {
         case unhandled(status: OSStatus)
     }

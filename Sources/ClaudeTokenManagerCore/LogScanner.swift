@@ -22,7 +22,7 @@ public struct ActivityEvent {
 }
 
 /// Scans ~/.claude/projects/*/*.jsonl and aggregates token usage per project.
-public final class LogScanner {
+public final class LogScanner: @unchecked Sendable {
 
     public static let shared = LogScanner()
 
