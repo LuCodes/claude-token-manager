@@ -156,7 +156,7 @@ public struct RawUsageReport: Codable, Sendable {
 // MARK: - Certificate pinning
 
 final class PinnedURLSessionDelegate: NSObject, URLSessionDelegate {
-    /// SHA-256 hashes of the public keys we trust for claude.ai.
+    /// SHA-256 hashes of the SubjectPublicKeyInfo (SPKI) DER we trust for claude.ai.
     /// Extracted 2026-04-20 via scripts/extract-spki-hash.sh.
     /// Source: Let's Encrypt E8 chain.
     /// When empty, falls back to system trust (pinning disabled).
@@ -186,14 +186,20 @@ final class PinnedURLSessionDelegate: NSObject, URLSessionDelegate {
         }
 
         guard let chain = SecTrustCopyCertificateChain(serverTrust) as? [SecCertificate],
-              let leafCert = chain.first,
-              let publicKey = SecCertificateCopyKey(leafCert),
-              let publicKeyData = SecKeyCopyExternalRepresentation(publicKey, nil) as Data? else {
+              let leafCert = chain.first else {
             completionHandler(.cancelAuthenticationChallenge, nil)
             return
         }
 
-        let hash = SHA256.hash(data: publicKeyData)
+        // Extract the SPKI (SubjectPublicKeyInfo) from the DER certificate
+        // using a minimal ASN.1 parser. This works for any key type/curve.
+        let certDER = SecCertificateCopyData(leafCert) as Data
+        guard let spkiData = SPKIExtractor.extractSPKI(from: certDER) else {
+            completionHandler(.cancelAuthenticationChallenge, nil)
+            return
+        }
+
+        let hash = SHA256.hash(data: spkiData)
         let hashBase64 = Data(hash).base64EncodedString()
 
         if pinnedSPKIHashes.isEmpty {
@@ -206,5 +212,112 @@ final class PinnedURLSessionDelegate: NSObject, URLSessionDelegate {
         } else {
             completionHandler(.cancelAuthenticationChallenge, nil)
         }
+    }
+}
+
+// MARK: - Minimal ASN.1 DER parser for SPKI extraction
+
+/// Extracts the SubjectPublicKeyInfo section from an X.509 DER certificate.
+/// Algorithm-agnostic: works with RSA, EC P-256, EC P-384, Ed25519, etc.
+enum SPKIExtractor {
+
+    /// Parse a DER-encoded X.509 certificate and return the raw bytes of the
+    /// SubjectPublicKeyInfo (SPKI) field, including its ASN.1 header.
+    static func extractSPKI(from certDER: Data) -> Data? {
+        // X.509 structure (simplified):
+        //   SEQUENCE (Certificate)
+        //     SEQUENCE (TBSCertificate)
+        //       [0] version (context-specific, optional)
+        //       INTEGER serialNumber
+        //       SEQUENCE signature algorithm
+        //       SEQUENCE issuer
+        //       SEQUENCE validity
+        //       SEQUENCE subject
+        //       SEQUENCE subjectPublicKeyInfo  ← this is what we want
+        //       ...
+
+        var offset = 0
+        let bytes = [UInt8](certDER)
+
+        // Parse outer SEQUENCE (Certificate)
+        guard let outerContent = parseSequence(bytes: bytes, offset: &offset) else { return nil }
+
+        // Parse TBSCertificate SEQUENCE
+        var tbsOffset = 0
+        guard let tbsContent = parseSequence(bytes: outerContent, offset: &tbsOffset) else { return nil }
+
+        var pos = 0
+
+        // Skip version if present (context-specific [0])
+        if pos < tbsContent.count && tbsContent[pos] == 0xA0 {
+            guard skipTLV(bytes: tbsContent, offset: &pos) else { return nil }
+        }
+
+        // Skip serialNumber (INTEGER)
+        guard skipTLV(bytes: tbsContent, offset: &pos) else { return nil }
+
+        // Skip signature algorithm (SEQUENCE)
+        guard skipTLV(bytes: tbsContent, offset: &pos) else { return nil }
+
+        // Skip issuer (SEQUENCE)
+        guard skipTLV(bytes: tbsContent, offset: &pos) else { return nil }
+
+        // Skip validity (SEQUENCE)
+        guard skipTLV(bytes: tbsContent, offset: &pos) else { return nil }
+
+        // Skip subject (SEQUENCE)
+        guard skipTLV(bytes: tbsContent, offset: &pos) else { return nil }
+
+        // Next is subjectPublicKeyInfo (SEQUENCE) — capture the full TLV
+        let spkiStart = pos
+        guard skipTLV(bytes: tbsContent, offset: &pos) else { return nil }
+        let spkiEnd = pos
+
+        return Data(tbsContent[spkiStart..<spkiEnd])
+    }
+
+    // MARK: - ASN.1 DER primitives
+
+    /// Parse a SEQUENCE tag and return its content bytes. Advances offset past the full TLV.
+    private static func parseSequence(bytes: [UInt8], offset: inout Int) -> [UInt8]? {
+        guard offset < bytes.count, bytes[offset] == 0x30 else { return nil }
+        offset += 1
+        guard let length = parseLength(bytes: bytes, offset: &offset) else { return nil }
+        guard offset + length <= bytes.count else { return nil }
+        let content = Array(bytes[offset..<(offset + length)])
+        offset += length
+        return content
+    }
+
+    /// Skip over a complete TLV (Tag-Length-Value) without parsing the value.
+    @discardableResult
+    private static func skipTLV(bytes: [UInt8], offset: inout Int) -> Bool {
+        guard offset < bytes.count else { return false }
+        offset += 1 // skip tag
+        guard let length = parseLength(bytes: bytes, offset: &offset) else { return false }
+        guard offset + length <= bytes.count else { return false }
+        offset += length
+        return true
+    }
+
+    /// Parse a DER length field. Supports short form (1 byte) and long form (multi-byte).
+    private static func parseLength(bytes: [UInt8], offset: inout Int) -> Int? {
+        guard offset < bytes.count else { return nil }
+        let first = bytes[offset]
+        offset += 1
+
+        if first < 0x80 {
+            return Int(first)
+        }
+
+        let numBytes = Int(first & 0x7F)
+        guard numBytes > 0, numBytes <= 4, offset + numBytes <= bytes.count else { return nil }
+
+        var length = 0
+        for i in 0..<numBytes {
+            length = (length << 8) | Int(bytes[offset + i])
+        }
+        offset += numBytes
+        return length
     }
 }
