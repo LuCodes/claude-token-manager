@@ -4,7 +4,6 @@ import ClaudeTokenManagerCore
 struct PreferencesView: View {
     @EnvironmentObject var store: UsageStore
     @Binding var isOpen: Bool
-    @State private var budgetText: String = ""
     @State private var orgIdInput: String = ""
     @State private var sessionKeyInput: String = ""
     @State private var isTesting: Bool = false
@@ -29,9 +28,6 @@ struct PreferencesView: View {
             footer
         }
         .onAppear {
-            if let v = store.dailyBudgetValue {
-                budgetText = String(format: "%.0f", v)
-            }
             if let orgId = ClaudeAIDataSource.loadOrgId() {
                 orgIdInput = orgId
             }
@@ -59,44 +55,20 @@ struct PreferencesView: View {
     // MARK: - Budget
 
     private var budgetCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text("Daily budget")
-                    .font(AppFont.inter(size: 12, weight: .medium))
-                Spacer()
-                HStack(spacing: 2) {
-                    Text(store.dailyBudgetIsMoney ? "$" : "tk")
-                        .font(AppFont.inter(size: 10))
-                        .foregroundColor(.white.opacity(0.4))
-                    TextField("", text: $budgetText)
-                        .font(AppFont.inter(size: 12))
-                        .textFieldStyle(.plain)
-                        .frame(width: 60)
-                        .padding(.horizontal, 8).padding(.vertical, 4)
-                        .background(Color.white.opacity(0.06))
-                        .clipShape(RoundedRectangle(cornerRadius: 6))
-                        .onChange(of: budgetText) { newValue in
-                            if newValue.isEmpty {
-                                store.dailyBudgetValue = nil
-                            } else if let v = Double(newValue), v > 0 {
-                                store.dailyBudgetValue = v
-                            }
-                        }
-                }
-            }
-            SegmentedToggle(
-                options: [
-                    (value: true, label: "$"),
-                    (value: false, label: "tokens")
-                ],
-                selection: $store.dailyBudgetIsMoney
+        VStack(alignment: .leading, spacing: 0) {
+            BudgetSlider(
+                value: Binding(
+                    get: { store.dailyBudgetValue ?? 0 },
+                    set: { newValue in
+                        store.dailyBudgetValue = newValue > 0 ? newValue : nil
+                    }
+                ),
+                maxValue: 20,
+                step: 1
             )
-            Text("Alerts you at 80% and 95% of your budget. Leave empty to disable.")
-                .font(AppFont.inter(size: 10))
-                .foregroundColor(.white.opacity(0.4))
-                .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.horizontal, 12).padding(.vertical, 10)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 14)
         .background(Color.white.opacity(0.04))
         .clipShape(RoundedRectangle(cornerRadius: 10))
     }
