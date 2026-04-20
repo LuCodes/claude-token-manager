@@ -27,10 +27,26 @@ mkdir -p "$APP_BUNDLE/Contents/Resources"
 cp "$BUILD_PATH" "$APP_BUNDLE/Contents/MacOS/$EXECUTABLE"
 cp Info.plist "$APP_BUNDLE/Contents/Info.plist"
 
-# Optional icon — drop AppIcon.icns in the repo root to include it
-if [ -f "AppIcon.icns" ]; then
+# Generate .icns from appiconset PNGs
+ICONSET_DIR="Sources/ClaudeTokenManager/Resources/Assets.xcassets/AppIcon.appiconset"
+if [ -d "$ICONSET_DIR" ] && [ -f "$ICONSET_DIR/icon_512x512@2x.png" ]; then
+    ICONSET_TMP=$(mktemp -d)/AppIcon.iconset
+    mkdir -p "$ICONSET_TMP"
+    cp "$ICONSET_DIR/icon_16x16.png" "$ICONSET_TMP/icon_16x16.png"
+    cp "$ICONSET_DIR/icon_16x16@2x.png" "$ICONSET_TMP/icon_16x16@2x.png"
+    cp "$ICONSET_DIR/icon_32x32.png" "$ICONSET_TMP/icon_32x32.png"
+    cp "$ICONSET_DIR/icon_32x32@2x.png" "$ICONSET_TMP/icon_32x32@2x.png"
+    cp "$ICONSET_DIR/icon_128x128.png" "$ICONSET_TMP/icon_128x128.png"
+    cp "$ICONSET_DIR/icon_128x128@2x.png" "$ICONSET_TMP/icon_128x128@2x.png"
+    cp "$ICONSET_DIR/icon_256x256.png" "$ICONSET_TMP/icon_256x256.png"
+    cp "$ICONSET_DIR/icon_256x256@2x.png" "$ICONSET_TMP/icon_256x256@2x.png"
+    cp "$ICONSET_DIR/icon_512x512.png" "$ICONSET_TMP/icon_512x512.png"
+    cp "$ICONSET_DIR/icon_512x512@2x.png" "$ICONSET_TMP/icon_512x512@2x.png"
+    iconutil -c icns "$ICONSET_TMP" -o "$APP_BUNDLE/Contents/Resources/AppIcon.icns"
+    rm -rf "$(dirname "$ICONSET_TMP")"
+    echo "  ✓ AppIcon.icns generated"
+elif [ -f "AppIcon.icns" ]; then
     cp AppIcon.icns "$APP_BUNDLE/Contents/Resources/"
-    /usr/libexec/PlistBuddy -c "Add :CFBundleIconFile string AppIcon" "$APP_BUNDLE/Contents/Info.plist" 2>/dev/null || true
 fi
 
 echo "→ Ad-hoc signing (for local use)..."
