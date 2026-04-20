@@ -1,86 +1,80 @@
-# Synchronisation avec claude.ai
+# claude.ai sync setup
 
-## Avertissements de securite — a lire avant de continuer
+See the main [README](../README.md#claudeai-sync-mode) for the full
+setup instructions. This document covers security warnings and
+troubleshooting.
 
-Le mode "Synchro claude.ai" recupere tes vraies limites de forfait en appelant l'API interne de claude.ai avec ton cookie de session. Avant de l'activer, tu dois comprendre ce que ca implique :
+## Security warnings — read before enabling
 
-### 1. Ton cookie donne un acces complet a ton compte
+The "claude.ai sync" mode fetches your real plan limits by calling
+claude.ai's internal API with your session cookie. Before enabling
+it, you must understand what this implies:
 
-Quiconque possede ton `sessionKey` peut :
-- Se connecter a claude.ai en tant que toi
-- Lire toutes tes conversations (y compris les privees)
-- Modifier ton abonnement ou tes parametres
-- Consommer ton quota
+### 1. Your cookie grants full access to your account
 
-**Ne partage JAMAIS ton cookie avec quelqu'un.** L'app le stocke dans le Keychain macOS qui est chiffre et lie a ton Mac, mais au moment ou tu l'extrais depuis DevTools, il passe par ton clipboard. Verifie qu'aucun outil de synchro clipboard (iCloud, Raycast, Paste, Alfred) ne l'envoie a un autre appareil.
+Anyone who possesses your `sessionKey` can:
+- Log into claude.ai as you
+- Read all your conversations (including private ones)
+- Change your subscription or settings
+- Consume your quota
 
-### 2. Cette fonctionnalite utilise une API non-documentee
+**Never share your cookie with anyone.** The app stores it in macOS
+Keychain which is encrypted and tied to your Mac, but when you
+extract it from DevTools, it passes through your clipboard. Make sure
+no clipboard sync tool (iCloud, Raycast, Paste, Alfred) sends it to
+another device.
 
-L'endpoint `/api/organizations/.../usage` est un endpoint **interne** de claude.ai, pas une API publique. Ca signifie :
+### 2. This feature uses an undocumented API
 
-- Anthropic peut changer ou bloquer cet endpoint a tout moment
-- Les Terms of Service d'Anthropic interdisent l'acces automatise a l'interface web
-- En theorie, ton compte pourrait etre suspendu si detecte comme bot
+The `/api/organizations/.../usage` endpoint is an **internal**
+claude.ai endpoint, not a public API. This means:
 
-En pratique, aucune suspension n'a ete observee a ce jour pour ce type d'usage modere (une requete toutes les 30 secondes), mais tu utilises cette fonctionnalite **a tes risques et perils**.
+- Anthropic can change or block this endpoint at any time
+- Anthropic's Terms of Service prohibit automated access to the web
+  interface
+- In theory, your account could be suspended if detected as a bot
 
-### 3. L'app est open-source et sans garantie
+In practice, no suspension has been observed for this type of
+moderate usage (one request every 30 seconds), but you use this
+feature **at your own risk**.
 
-Le code est public sur GitHub et audite par la communaute. Mais c'est un projet solo sans garantie de securite commerciale. Si tu as des doutes, inspecte le code avant d'entrer tes credentials.
+### 3. The app is open-source with no warranty
 
-### 4. Si tu soupconne une fuite
+The code is public on GitHub and auditable by the community. But it's
+a solo project with no commercial security guarantee. If you have
+doubts, inspect the code before entering your credentials.
 
-Deconnecte-toi de claude.ai depuis le site web. Ca invalide ton cookie de session immediatement, peu importe ou il se trouve. Tu peux ensuite te reconnecter normalement.
+### 4. If you suspect a leak
 
-### 5. Auto-nettoyage
+Log out of claude.ai from the website. This invalidates your session
+cookie immediately, no matter where it is. You can then log back in
+normally.
 
-Si tu n'ouvres pas Claude Token Manager pendant 30 jours, tes credentials stockes sont automatiquement purges pour minimiser la fenetre d'exposition en cas de Mac vole ou compromis.
+### 5. Auto-cleanup
+
+If you don't open Claude Token Manager for 30 days, your stored
+credentials are automatically purged to minimize the exposure window
+in case of a stolen or compromised Mac.
 
 ---
 
-## Pas de risque ? Voici comment proceder
+## Troubleshooting
 
-### Etape 1 : Ouvrir les DevTools sur claude.ai
+### "Test & save" returns an error
 
-1. Ouvre https://claude.ai dans Chrome, Brave ou Firefox
-2. Connecte-toi a ton compte
-3. Ouvre les DevTools : `Cmd + Option + I` (ou clic-droit > Inspecter)
-4. Va dans l'onglet **Network**
+- The session cookie expires after some time. Log out and back into
+  claude.ai, then copy the new cookie.
+- The organization ID is the UUID in the URL path, not in any header.
+- Make sure you copied the cookie **value** only, not the
+  `sessionKey=` prefix.
 
-### Etape 2 : Trouver la requete `/usage`
+### The app shows old percentages
 
-1. Dans claude.ai, clique sur **Settings** > **Usage** (ou va directement a https://claude.ai/settings/usage)
-2. Dans l'onglet Network des DevTools, filtre par "usage"
-3. Tu devrais voir une requete GET vers une URL du type :
-   ```
-   https://claude.ai/api/organizations/XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX/usage
-   ```
+- The app refreshes every 30 seconds. Click the refresh icon at the
+  bottom of the dropdown to force an immediate update.
 
-### Etape 3 : Recuperer l'Organization ID
+### After updating the app, I see a Gatekeeper prompt
 
-C'est la partie UUID dans l'URL ci-dessus :
-```
-XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX
-```
-
-Copie cette valeur et colle-la dans le champ "Organization ID" de l'app.
-
-### Etape 4 : Recuperer le Session Key
-
-1. Dans les DevTools, va dans l'onglet **Application** > **Cookies** > `https://claude.ai`
-2. Cherche le cookie nomme `sessionKey`
-3. Copie sa **valeur** (c'est une longue chaine qui commence generalement par `sk-ant-sid01-...`)
-4. Colle-la dans le champ "Cookie de session" de l'app
-
-### Etape 5 : Tester
-
-Clique sur "Tester et enregistrer". Si tout est bon, tu verras un point vert "Connecte".
-
-### Quand ca expire
-
-Le cookie de session expire generalement apres quelques jours ou semaines. Quand ca arrive :
-1. L'app affichera "Session claude.ai expiree" dans le dropdown
-2. Reconnecte-toi a claude.ai dans ton navigateur
-3. Repete les etapes 2-5 pour recoller un nouveau cookie
-
-L'app bascule automatiquement sur les logs locaux quand le cookie expire — tu ne perds jamais l'acces a tes donnees.
+- Run `xattr -cr "/Applications/Claude Token Manager.app"` and
+  relaunch. The Homebrew cask does this automatically — if you
+  installed manually, you'll see this once per version.
