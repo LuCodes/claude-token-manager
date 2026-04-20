@@ -28,12 +28,30 @@ public final class UsageStore: ObservableObject {
         didSet { UserDefaults.standard.set(launchAtLoginEnabled, forKey: "launchAtLoginEnabled") }
     }
 
-    /// The active data source. For v0.3.0 this is always LocalLogsDataSource.
-    /// In v0.3.1+ it can switch to ClaudeAIDataSource if the user enables it.
-    private var primaryDataSource: any DataSource = LocalLogsDataSource()
-    private var fallbackDataSource: any DataSource = LocalLogsDataSource()
+    // MARK: - Claude.ai sync
 
-    /// Which source produced the current snapshot.
+    @Published public private(set) var claudeAIModeEnabled: Bool {
+        didSet {
+            UserDefaults.standard.set(claudeAIModeEnabled, forKey: "claudeAIModeEnabled")
+            refreshDataSources()
+        }
+    }
+
+    @Published public private(set) var claudeAIConnectionStatus: ConnectionStatus = .unknown
+
+    public enum ConnectionStatus: Equatable {
+        case unknown
+        case testing
+        case connected
+        case expired
+        case error(String)
+    }
+
+    // MARK: - Data sources
+
+    private var primaryDataSource: any DataSource = LocalLogsDataSource()
+    private let fallbackDataSource: any DataSource = LocalLogsDataSource()
+
     @Published public private(set) var activeSourceId: String = "local-logs"
 
     private var refreshTask: Task<Void, Never>?
@@ -64,6 +82,10 @@ public final class UsageStore: ObservableObject {
             self.launchAtLoginEnabled = UserDefaults.standard.bool(forKey: "launchAtLoginEnabled")
         }
 
+        self.claudeAIModeEnabled = UserDefaults.standard.bool(forKey: "claudeAIModeEnabled")
+
+        refreshDataSources()
+        pruneStaleCredentialsIfNeeded()
         refresh()
         startWatching()
         startPeriodicRefresh()
@@ -74,6 +96,8 @@ public final class UsageStore: ObservableObject {
     }
 
     deinit { refreshTask?.cancel() }
+
+    // MARK: - Refresh
 
     public func refresh() {
         let primary = primaryDataSource
@@ -92,6 +116,12 @@ public final class UsageStore: ObservableObject {
                     self.selectedProjectId = UsageSnapshot.allProjectsId
                 }
                 self.evaluateBudgetNotifications()
+                if sourceId == "claude-ai" {
+                    UserDefaults.standard.set(
+                        Date().timeIntervalSince1970,
+                        forKey: "claudeAILastSuccessfulFetch"
+                    )
+                }
             }
         }
     }
@@ -117,6 +147,82 @@ public final class UsageStore: ObservableObject {
 
         return (UsageSnapshot(), "none")
     }
+
+    // MARK: - Data source management
+
+    private func refreshDataSources() {
+        if claudeAIModeEnabled && ClaudeAIDataSource.hasStoredCredentials() {
+            primaryDataSource = ClaudeAIDataSource()
+        } else {
+            primaryDataSource = LocalLogsDataSource()
+        }
+    }
+
+    public func setClaudeAIMode(enabled: Bool) {
+        claudeAIModeEnabled = enabled
+        refresh()
+    }
+
+    public func testAndSaveClaudeAICredentials(
+        orgId: String,
+        sessionKey: String
+    ) async {
+        await MainActor.run { self.claudeAIConnectionStatus = .testing }
+        do {
+            try ClaudeAIDataSource.saveCredentials(orgId: orgId, sessionKey: sessionKey)
+            let ds = ClaudeAIDataSource()
+            _ = try await ds.fetch()
+            await MainActor.run {
+                self.claudeAIConnectionStatus = .connected
+                self.refreshDataSources()
+                self.refresh()
+            }
+        } catch let err as DataSourceError {
+            ClaudeAIDataSource.clearCredentials()
+            let isAuth: Bool
+            switch err {
+            case .authenticationExpired, .authenticationRequired: isAuth = true
+            default: isAuth = false
+            }
+            await MainActor.run {
+                self.claudeAIConnectionStatus = isAuth
+                    ? .expired
+                    : .error("Connection failed")
+            }
+        } catch {
+            ClaudeAIDataSource.clearCredentials()
+            await MainActor.run {
+                self.claudeAIConnectionStatus = .error(error.localizedDescription)
+            }
+        }
+    }
+
+    public func clearClaudeAICredentials() {
+        ClaudeAIDataSource.clearCredentials()
+        claudeAIConnectionStatus = .unknown
+        refreshDataSources()
+    }
+
+    public func pruneStaleCredentialsIfNeeded() {
+        let key = "claudeAILastSuccessfulFetch"
+        let now = Date()
+        let cutoff: TimeInterval = 30 * 24 * 3600
+
+        guard ClaudeAIDataSource.hasStoredCredentials() else { return }
+
+        let lastFetch = UserDefaults.standard.double(forKey: key)
+        guard lastFetch > 0 else {
+            UserDefaults.standard.set(now.timeIntervalSince1970, forKey: key)
+            return
+        }
+
+        if now.timeIntervalSince1970 - lastFetch > cutoff {
+            clearClaudeAICredentials()
+            NSLog("Claude Token Manager: auto-cleared stale claude.ai credentials after 30 days of inactivity")
+        }
+    }
+
+    // MARK: - Notifications
 
     private func evaluateBudgetNotifications() {
         guard let budget = dailyBudgetValue, budget > 0 else { return }
@@ -159,17 +265,13 @@ public final class UsageStore: ObservableObject {
 
     public var compactLabel: String {
         switch displayFormat {
-        case .cost:
-            return CostFormatter.format(snapshot.todayTotalCost)
-        case .tokens:
-            return TokenFormatter.compact(snapshot.todayTotalTokens)
+        case .cost:  return CostFormatter.format(snapshot.todayTotalCost)
+        case .tokens: return TokenFormatter.compact(snapshot.todayTotalTokens)
         }
     }
 
     public var menuBarTint: Color {
-        guard let budget = dailyBudgetValue, budget > 0 else {
-            return Color.primary
-        }
+        guard let budget = dailyBudgetValue, budget > 0 else { return Color.primary }
         let current: Double = dailyBudgetIsMoney
             ? snapshot.todayTotalCost
             : Double(snapshot.todayTotalTokens)
@@ -182,16 +284,12 @@ public final class UsageStore: ObservableObject {
     // MARK: - Session info
 
     public var sessionResetLabel: String {
-        guard let end = snapshot.sessionEnd else {
-            return "Pas de session active"
-        }
+        guard let end = snapshot.sessionEnd else { return "Pas de session active" }
         let remaining = end.timeIntervalSince(Date())
         if remaining <= 0 { return "R\u{00E9}initialis\u{00E9}e" }
         let hours = Int(remaining) / 3600
         let minutes = (Int(remaining) % 3600) / 60
-        if hours > 0 {
-            return "reset dans \(hours) h \(minutes) min"
-        }
+        if hours > 0 { return "reset dans \(hours) h \(minutes) min" }
         return "reset dans \(minutes) min"
     }
 
