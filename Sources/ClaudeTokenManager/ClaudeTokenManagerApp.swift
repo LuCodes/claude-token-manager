@@ -38,12 +38,12 @@ struct MenuBarLabel: View {
             Image(nsImage: loadMenuBarIcon())
                 .resizable()
                 .scaledToFit()
-                .frame(width: 8, height: 8)
-                .fixedSize()
+                .frame(width: 18, height: 18)
             Text(labelText)
                 .font(AppFont.inter(size: 9, weight: .medium))
                 .monospacedDigit()
         }
+        .padding(.horizontal, 4)
         .foregroundColor(labelColor)
     }
 
