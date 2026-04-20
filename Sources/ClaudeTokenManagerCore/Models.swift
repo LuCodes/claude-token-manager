@@ -213,6 +213,14 @@ public struct UsageSnapshot {
     public var sessionStart: Date?
     public var sessionEnd: Date?
 
+    /// When populated (typically by ClaudeAIDataSource), the UI renders these
+    /// progress bars instead of the local tokens/cost layout.
+    public var remoteProgressBars: [RemoteProgressBar] = []
+
+    public var hottestRemoteBar: RemoteProgressBar? {
+        remoteProgressBars.max(by: { $0.percent < $1.percent })
+    }
+
     public func scoped(to projectId: String) -> ProjectUsage {
         if projectId == Self.allProjectsId {
             return ProjectUsage(
@@ -324,6 +332,43 @@ public enum CostFormatter {
 
     public static func format(_ value: Double) -> String {
         fmt.string(from: NSNumber(value: value)) ?? "$0.00"
+    }
+}
+
+// MARK: - Remote progress bar
+
+public struct RemoteProgressBar: Identifiable, Sendable {
+    public let id: String
+    public let label: String
+    public let percent: Double
+    public let resetsAt: Date?
+
+    public init(id: String, label: String, percent: Double, resetsAt: Date?) {
+        self.id = id
+        self.label = label
+        self.percent = percent
+        self.resetsAt = resetsAt
+    }
+
+    public var clampedPercent: Double { max(0, min(100, percent)) }
+
+    public var hue: Hue {
+        if percent >= 95 { return .coral }
+        if percent >= 80 { return .amber }
+        switch id {
+        case "session":   return .blue
+        case "all":       return .blue
+        case "sonnet":    return .green
+        case "design":    return .coral
+        case "opus":      return .purple
+        case "cowork":    return .purple
+        case "oauth":     return .gray
+        default:          return .gray
+        }
+    }
+
+    public enum Hue: String, Sendable {
+        case blue, green, coral, amber, purple, gray
     }
 }
 
