@@ -49,13 +49,13 @@ elif [ -f "AppIcon.icns" ]; then
     cp AppIcon.icns "$APP_BUNDLE/Contents/Resources/"
 fi
 
-# Generate and copy menu bar icon PDF directly into Resources
+# Copy menu bar icon PDF into Resources
 if command -v rsvg-convert &> /dev/null && [ -f "assets/menu-bar-icon.svg" ]; then
     rsvg-convert -f pdf "assets/menu-bar-icon.svg" -o "$APP_BUNDLE/Contents/Resources/MenuBarIcon.pdf"
-    echo "  ✓ MenuBarIcon.pdf generated"
-elif [ -f "Sources/ClaudeTokenManager/Resources/Assets.xcassets/MenuBarIcon.imageset/MenuBarIcon.pdf" ]; then
-    cp "Sources/ClaudeTokenManager/Resources/Assets.xcassets/MenuBarIcon.imageset/MenuBarIcon.pdf" "$APP_BUNDLE/Contents/Resources/"
-    echo "  ✓ MenuBarIcon.pdf copied (fallback)"
+    echo "  ✓ MenuBarIcon.pdf generated from SVG"
+elif [ -f "assets/MenuBarIcon.pdf" ]; then
+    cp "assets/MenuBarIcon.pdf" "$APP_BUNDLE/Contents/Resources/"
+    echo "  ✓ MenuBarIcon.pdf copied from assets"
 fi
 
 # Copy notification icon to bundle Resources
