@@ -39,9 +39,10 @@ public final class LogScanner: @unchecked Sendable {
     }()
 
     public var claudeProjectsDir: URL {
-        fileManager.homeDirectoryForCurrentUser
-            .appendingPathComponent(".claude")
-            .appendingPathComponent("projects")
+        ClaudeProjectsPathResolver.resolve()
+            ?? fileManager.homeDirectoryForCurrentUser
+                .appendingPathComponent(".claude")
+                .appendingPathComponent("projects")
     }
 
     public func scan() -> UsageSnapshot {
@@ -109,7 +110,7 @@ public final class LogScanner: @unchecked Sendable {
         }
 
         snapshot.projects = projects.values
-            .filter { !$0.todayByModel.isEmpty || !$0.monthByModel.isEmpty }
+            .filter { $0.lastActivity != nil }
             .sorted { a, b in
                 if a.isActive != b.isActive { return a.isActive }
                 return (a.lastActivity ?? .distantPast) > (b.lastActivity ?? .distantPast)

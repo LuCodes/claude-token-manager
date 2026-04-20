@@ -9,20 +9,20 @@ struct DropdownView: View {
     private let fg = Color(red: 241/255, green: 239/255, blue: 232/255)
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        Group {
             if showingPreferences {
-                PreferencesView(isOpen: $showingPreferences)
+                PreferencesView(onClose: { showingPreferences = false })
                     .environmentObject(store)
-                    .transition(.opacity)
             } else {
-                mainContent
-                    .transition(.opacity)
+                VStack(alignment: .leading, spacing: 0) {
+                    mainContent
+                }
+                .padding(16)
+                .background(bg)
+                .foregroundColor(fg)
             }
         }
-        .padding(16)
-        .background(bg)
-        .foregroundColor(fg)
-        .animation(.easeInOut(duration: 0.15), value: showingPreferences)
+        .focusable(false)
     }
 
     // MARK: - Main
@@ -252,8 +252,11 @@ struct DropdownView: View {
     private var header: some View {
         HStack {
             HStack(spacing: 8) {
-                Image("MenuBarIcon", bundle: .module)
-                    .renderingMode(.template)
+                Image(nsImage: {
+                    let img = NSImage(contentsOf: Bundle.main.url(forResource: "MenuBarIcon", withExtension: "pdf")!)!
+                    img.isTemplate = true
+                    return img
+                }())
                     .resizable()
                     .scaledToFit()
                     .frame(width: 14, height: 14)
@@ -267,10 +270,12 @@ struct DropdownView: View {
                     .font(.system(size: 11))
                     .foregroundColor(.white.opacity(0.6))
                     .frame(width: 24, height: 24)
+                    .contentShape(Rectangle())
                     .background(Color.white.opacity(0.06))
                     .clipShape(RoundedRectangle(cornerRadius: 6))
             }
             .buttonStyle(.plain)
+            .focusable(false)
         }
     }
 
@@ -283,28 +288,21 @@ struct DropdownView: View {
                     Label("All projects", systemImage: "checkmark")
                 } else { Text("All projects") }
             }
-            if !store.snapshot.projects.isEmpty {
+            if !store.availableProjects.isEmpty {
                 Divider()
-                ForEach(store.snapshot.projects) { project in
-                    Button(action: { store.selectedProjectId = project.id }) {
-                        let marker = project.isActive ? "\u{25CF} " : ""
-                        let title = "\(marker)\(project.displayName)"
-                        if project.id == store.selectedProjectId {
-                            Label(title, systemImage: "checkmark")
-                        } else { Text(title) }
+                ForEach(store.availableProjects) { project in
+                    Button(action: { store.selectedProjectId = project.rawName }) {
+                        if project.rawName == store.selectedProjectId {
+                            Label(project.displayName, systemImage: "checkmark")
+                        } else { Text(project.displayName) }
                     }
                 }
             }
         } label: {
             HStack(spacing: 4) {
-                if store.selectedProjectId != UsageSnapshot.allProjectsId,
-                   store.selectedProject.isActive {
-                    Circle().fill(Color(red: 151/255, green: 196/255, blue: 89/255)).frame(width: 6, height: 6)
-                }
-                Text("Project: \(store.selectedProject.displayName)")
+                Text("Project: \(selectedProjectDisplayName)")
                     .font(AppFont.inter(size: 11)).lineLimit(1).truncationMode(.tail)
                 Spacer(minLength: 4)
-                Image(systemName: "chevron.down").font(.system(size: 8, weight: .medium))
             }
             .foregroundColor(.white.opacity(0.7))
             .padding(.horizontal, 10).padding(.vertical, 6)
@@ -313,6 +311,14 @@ struct DropdownView: View {
             .clipShape(RoundedRectangle(cornerRadius: 8))
         }
         .menuStyle(.borderlessButton)
+    }
+
+    private var selectedProjectDisplayName: String {
+        if store.selectedProjectId == UsageSnapshot.allProjectsId {
+            return "All projects"
+        }
+        return store.availableProjects.first { $0.rawName == store.selectedProjectId }?.displayName
+            ?? store.selectedProjectId
     }
 
     // MARK: - Today big card
@@ -502,7 +508,10 @@ struct DropdownView: View {
 
             Button(action: { NSApp.terminate(nil) }) {
                 Text("Quit").font(AppFont.inter(size: 11)).foregroundColor(.white.opacity(0.5))
-            }.buttonStyle(.plain)
+            }
+            .buttonStyle(.plain)
+            .focusable(false)
         }
     }
+
 }

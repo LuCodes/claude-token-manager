@@ -28,3 +28,7 @@ notarization-*.json
 # IDE
 .vscode/
 .idea/
+# Claude Code internal docs (briefs, notes)
+CLAUDE_CODE_BRIEF_*.md
+CLAUDE.md
+.claude/
