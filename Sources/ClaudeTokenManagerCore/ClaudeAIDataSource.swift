@@ -108,13 +108,13 @@ public final class ClaudeAIDataSource: DataSource, @unchecked Sendable {
         // Build remote progress bars for the UI
         var bars: [RemoteProgressBar] = []
         if let pool = raw.fiveHour {
-            bars.append(RemoteProgressBar(id: "session", label: "Session actuelle", percent: pool.utilization, resetsAt: pool.resetsAt))
+            bars.append(RemoteProgressBar(id: "session", label: "Current session", percent: pool.utilization, resetsAt: pool.resetsAt))
         }
         if let pool = raw.sevenDay {
-            bars.append(RemoteProgressBar(id: "all", label: "Tous les mod\u{00E8}les", percent: pool.utilization, resetsAt: pool.resetsAt))
+            bars.append(RemoteProgressBar(id: "all", label: "All models", percent: pool.utilization, resetsAt: pool.resetsAt))
         }
         if let pool = raw.sevenDaySonnet {
-            bars.append(RemoteProgressBar(id: "sonnet", label: "Sonnet seulement", percent: pool.utilization, resetsAt: pool.resetsAt))
+            bars.append(RemoteProgressBar(id: "sonnet", label: "Sonnet only", percent: pool.utilization, resetsAt: pool.resetsAt))
         }
         if let pool = raw.sevenDayOpus {
             bars.append(RemoteProgressBar(id: "opus", label: "Opus", percent: pool.utilization, resetsAt: pool.resetsAt))
@@ -126,7 +126,7 @@ public final class ClaudeAIDataSource: DataSource, @unchecked Sendable {
             bars.append(RemoteProgressBar(id: "cowork", label: "Cowork", percent: pool.utilization, resetsAt: pool.resetsAt))
         }
         if let pool = raw.sevenDayOauthApps {
-            bars.append(RemoteProgressBar(id: "oauth", label: "Int\u{00E9}grations OAuth", percent: pool.utilization, resetsAt: pool.resetsAt))
+            bars.append(RemoteProgressBar(id: "oauth", label: "OAuth integrations", percent: pool.utilization, resetsAt: pool.resetsAt))
         }
         snapshot.remoteProgressBars = bars
 

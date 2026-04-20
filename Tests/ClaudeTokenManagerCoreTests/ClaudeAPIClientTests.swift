@@ -99,7 +99,7 @@ final class ClaudeAPIClientTests: XCTestCase {
         let sessionBar = bars.first { $0.id == "session" }
         XCTAssertNotNil(sessionBar)
         XCTAssertEqual(sessionBar?.percent, 78)
-        XCTAssertEqual(sessionBar?.label, "Session actuelle")
+        XCTAssertEqual(sessionBar?.label, "Current session")
 
         let designBar = bars.first { $0.id == "design" }
         XCTAssertEqual(designBar?.percent, 43)
