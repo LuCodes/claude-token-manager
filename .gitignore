@@ -1,0 +1,30 @@
+# Swift / SPM
+.build/
+.swiftpm/
+Packages/
+*.xcodeproj/
+Package.resolved
+DerivedData/
+
+# Build output
+build/
+*.app
+*.dmg
+*.zip
+
+# macOS
+.DS_Store
+._*
+
+# Xcode user-specific
+xcuserdata/
+*.xcworkspace/xcuserdata/
+
+# Secrets (just in case — never commit signing creds)
+*.p12
+*.provisionprofile
+notarization-*.json
+
+# IDE
+.vscode/
+.idea/

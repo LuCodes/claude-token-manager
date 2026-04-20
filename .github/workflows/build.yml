@@ -1,0 +1,37 @@
+name: Build macOS App
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app
+
+      - name: Build release
+        run: ./build.sh release
+
+      - name: Create ZIP
+        run: |
+          cd build
+          zip -r "ClaudeTokenManager.zip" "Claude Token Manager.app"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ClaudeTokenManager
+          path: build/ClaudeTokenManager.zip
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/ClaudeTokenManager.zip
+          generate_release_notes: true
