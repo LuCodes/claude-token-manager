@@ -35,8 +35,7 @@ struct MenuBarLabel: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            Image("MenuBarIcon", bundle: .module)
-                .renderingMode(.template)
+            Image(nsImage: loadMenuBarIcon())
                 .resizable()
                 .scaledToFit()
                 .frame(width: 15, height: 15)
@@ -67,5 +66,17 @@ struct MenuBarLabel: View {
         if session.percent >= 95 { return Color(red: 216/255, green: 90/255, blue: 48/255) }
         if session.percent >= 80 { return Color(red: 239/255, green: 159/255, blue: 39/255) }
         return .primary
+    }
+
+    private func loadMenuBarIcon() -> NSImage {
+        if let url = Bundle.main.url(forResource: "MenuBarIcon", withExtension: "pdf"),
+           let image = NSImage(contentsOf: url) {
+            image.isTemplate = true
+            return image
+        }
+        let fallback = NSImage(systemSymbolName: "sparkles", accessibilityDescription: nil)
+            ?? NSImage()
+        fallback.isTemplate = true
+        return fallback
     }
 }
