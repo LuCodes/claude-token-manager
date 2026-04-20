@@ -1,5 +1,26 @@
 import Foundation
 
+public struct ActivityEvent {
+    public let date: Date
+    public let model: String
+    public let inputTokens: Int
+    public let outputTokens: Int
+    public let cacheCreationTokens: Int
+    public let cacheReadTokens: Int
+
+    public var totalTokens: Int {
+        inputTokens + outputTokens + cacheCreationTokens + cacheReadTokens
+    }
+
+    public var exactCost: Double {
+        let pricing = Pricing.forModel(model)
+        return Double(inputTokens) / 1_000_000 * pricing.input
+            + Double(outputTokens) / 1_000_000 * pricing.output
+            + Double(cacheCreationTokens) / 1_000_000 * pricing.cacheWrite
+            + Double(cacheReadTokens) / 1_000_000 * pricing.cacheRead
+    }
+}
+
 /// Scans ~/.claude/projects/*/*.jsonl and aggregates token usage per project.
 public final class LogScanner {
 
@@ -42,7 +63,7 @@ public final class LogScanner {
         var sessionsMap: [String: SessionInfo] = [:]
         var projects: [String: ProjectUsage] = [:]
         var activityDates: [Date] = []
-        var activityTokenPairs: [(date: Date, tokens: Int, model: String)] = []
+        var activityEvents: [ActivityEvent] = []
         var weekByModel: [String: ModelUsage] = [:]
         let twentyFourHoursAgo = now.addingTimeInterval(-24 * 3600)
 
@@ -79,7 +100,7 @@ public final class LogScanner {
                     project: &project,
                     sessionsMap: &sessionsMap,
                     activityDates: &activityDates,
-                    activityTokenPairs: &activityTokenPairs,
+                    activityEvents: &activityEvents,
                     weekByModel: &weekByModel
                 )
             }
@@ -102,18 +123,13 @@ public final class LogScanner {
         snapshot.weekByModel = weekByModel
 
         if let session = LimitCalculator.currentSessionWindow(activityDates: activityDates, now: now),
-           case .session(let sStart, let sEnd) = session {
+           case .session(let sStart, _) = session {
             snapshot.sessionStart = sStart
-            snapshot.sessionEnd = sEnd
-            let sessionPairs = activityTokenPairs.filter { $0.date >= sStart && $0.date <= now }
-            snapshot.sessionTokensRaw = sessionPairs.reduce(0) { $0 + $1.tokens }
-            // Compute session cost from model-specific pricing
-            snapshot.sessionCost = sessionPairs.reduce(0.0) { acc, pair in
-                let pricing = Pricing.forModel(pair.model)
-                // Approximate: treat all tokens as input (conservative estimate)
-                // In practice, output tokens cost more but we don't have the split here
-                return acc + Double(pair.tokens) / 1_000_000 * pricing.input
-            }
+            snapshot.sessionEnd = sStart.addingTimeInterval(5 * 3600)
+
+            let inWindow = activityEvents.filter { $0.date >= sStart && $0.date <= now }
+            snapshot.sessionTokens = inWindow.reduce(0) { $0 + $1.totalTokens }
+            snapshot.sessionCost = inWindow.reduce(0) { $0 + $1.exactCost }
         }
 
         snapshot.lastUpdate = Date()
@@ -131,7 +147,7 @@ public final class LogScanner {
         project: inout ProjectUsage,
         sessionsMap: inout [String: SessionInfo],
         activityDates: inout [Date],
-        activityTokenPairs: inout [(date: Date, tokens: Int, model: String)],
+        activityEvents: inout [ActivityEvent],
         weekByModel: inout [String: ModelUsage]
     ) {
         guard let data = try? Data(contentsOf: fileURL),
@@ -190,7 +206,11 @@ public final class LogScanner {
 
             if date >= twentyFourHoursAgo {
                 activityDates.append(date)
-                activityTokenPairs.append((date: date, tokens: total, model: model))
+                activityEvents.append(ActivityEvent(
+                    date: date, model: model,
+                    inputTokens: input, outputTokens: output,
+                    cacheCreationTokens: cacheWrite, cacheReadTokens: cacheRead
+                ))
             }
 
             if date >= startOfToday {

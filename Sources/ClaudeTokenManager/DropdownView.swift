@@ -216,7 +216,7 @@ struct DropdownView: View {
 
     private var sessionCard: some View {
         let costStr = CostFormatter.format(store.snapshot.sessionCost)
-        let tokStr = TokenFormatter.compact(store.snapshot.sessionTokensRaw)
+        let tokStr = TokenFormatter.compact(store.snapshot.sessionTokens)
         let primary = store.displayFormat == .cost ? costStr : "\(tokStr) tokens"
 
         return card {
