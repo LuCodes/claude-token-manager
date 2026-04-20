@@ -5,6 +5,9 @@ struct DropdownView: View {
     @EnvironmentObject var store: UsageStore
     @State private var showingPreferences = false
 
+    private let bg = Color(red: 31/255, green: 31/255, blue: 30/255)
+    private let fg = Color(red: 241/255, green: 239/255, blue: 232/255)
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             if showingPreferences {
@@ -17,31 +20,37 @@ struct DropdownView: View {
             }
         }
         .padding(16)
-        .background(Color(red: 31/255, green: 31/255, blue: 30/255))
-        .foregroundColor(Color(red: 241/255, green: 239/255, blue: 232/255))
+        .background(bg)
+        .foregroundColor(fg)
         .animation(.easeInOut(duration: 0.15), value: showingPreferences)
     }
 
-    // MARK: - Main view
+    // MARK: - Main
 
     @ViewBuilder
     private var mainContent: some View {
         header
         Spacer().frame(height: 12)
         projectMenu
+        Spacer().frame(height: 14)
+        sectionTitle("Aujourd'hui")
+        Spacer().frame(height: 8)
+        todayBigCard
         Spacer().frame(height: 12)
-        sessionLimitCard
+        sectionTitle("R\u{00E9}partition par mod\u{00E8}le")
+        Spacer().frame(height: 8)
+        modelCards
         Spacer().frame(height: 12)
-        weeklyHeader
+        sectionTitle("Session active (5h)")
         Spacer().frame(height: 8)
-        progressRow(store.weeklyTotalProgress)
+        sessionCard
+        Spacer().frame(height: 12)
+        sectionTitle("Cette semaine")
         Spacer().frame(height: 8)
-        progressRow(store.weeklyOpusProgress)
-        Spacer().frame(height: 8)
-        progressRow(store.weeklySonnetProgress)
-        if let haiku = store.weeklyHaikuProgress {
-            Spacer().frame(height: 8)
-            progressRow(haiku)
+        weekCard
+        if let top = store.snapshot.topProjectToday {
+            Spacer().frame(height: 10)
+            topProjectRow(name: top.name, cost: top.cost)
         }
         Spacer().frame(height: 12)
         Divider().background(Color.white.opacity(0.08))
@@ -59,7 +68,7 @@ struct DropdownView: View {
                     .resizable()
                     .scaledToFit()
                     .frame(width: 14, height: 14)
-                    .foregroundColor(Color(red: 241/255, green: 239/255, blue: 232/255))
+                    .foregroundColor(fg)
                 Text("Claude Token Manager")
                     .font(AppFont.inter(size: 13, weight: .medium))
             }
@@ -76,16 +85,14 @@ struct DropdownView: View {
         }
     }
 
-    // MARK: - Project picker (full width)
+    // MARK: - Project picker
 
     private var projectMenu: some View {
         Menu {
             Button(action: { store.selectedProjectId = UsageSnapshot.allProjectsId }) {
                 if store.selectedProjectId == UsageSnapshot.allProjectsId {
                     Label("Tous les projets", systemImage: "checkmark")
-                } else {
-                    Text("Tous les projets")
-                }
+                } else { Text("Tous les projets") }
             }
             if !store.snapshot.projects.isEmpty {
                 Divider()
@@ -95,9 +102,7 @@ struct DropdownView: View {
                         let title = "\(marker)\(project.displayName)"
                         if project.id == store.selectedProjectId {
                             Label(title, systemImage: "checkmark")
-                        } else {
-                            Text(title)
-                        }
+                        } else { Text(title) }
                     }
                 }
             }
@@ -105,21 +110,15 @@ struct DropdownView: View {
             HStack(spacing: 4) {
                 if store.selectedProjectId != UsageSnapshot.allProjectsId,
                    store.selectedProject.isActive {
-                    Circle()
-                        .fill(Color(red: 151/255, green: 196/255, blue: 89/255))
-                        .frame(width: 6, height: 6)
+                    Circle().fill(Color(red: 151/255, green: 196/255, blue: 89/255)).frame(width: 6, height: 6)
                 }
                 Text("Projet : \(store.selectedProject.displayName)")
-                    .font(AppFont.inter(size: 11))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
+                    .font(AppFont.inter(size: 11)).lineLimit(1).truncationMode(.tail)
                 Spacer(minLength: 4)
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 8, weight: .medium))
+                Image(systemName: "chevron.down").font(.system(size: 8, weight: .medium))
             }
             .foregroundColor(.white.opacity(0.7))
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
+            .padding(.horizontal, 10).padding(.vertical, 6)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Color.white.opacity(0.04))
             .clipShape(RoundedRectangle(cornerRadius: 8))
@@ -127,94 +126,168 @@ struct DropdownView: View {
         .menuStyle(.borderlessButton)
     }
 
-    // MARK: - Session + weekly
+    // MARK: - Today big card
 
-    private var sessionLimitCard: some View {
-        progressRow(store.sessionProgress, emphasized: true)
-    }
-
-    private var weeklyHeader: some View {
-        HStack {
-            Text("Cette semaine")
-                .font(AppFont.inter(size: 13, weight: .medium))
-            Spacer()
-            Text(relativeTime(store.snapshot.lastUpdate))
-                .font(AppFont.inter(size: 10))
-                .foregroundColor(.white.opacity(0.4))
+    private var todayBigCard: some View {
+        let cost = store.snapshot.todayTotalCost
+        let tokens = store.snapshot.todayTotalTokens
+        let primary: String
+        let secondary: String
+        if store.displayFormat == .cost {
+            primary = CostFormatter.format(cost)
+            secondary = "\(TokenFormatter.compact(tokens)) tokens"
+        } else {
+            primary = "\(TokenFormatter.compact(tokens)) tokens"
+            secondary = CostFormatter.format(cost)
         }
-    }
 
-    // MARK: - Progress row
-
-    private func progressRow(_ progress: LimitProgress, emphasized: Bool = false) -> some View {
-        let percent = Int((progress.clampedPercent * 100).rounded(.down))
-        let (barColor, textColor): (Color, Color) = {
-            if progress.clampedPercent >= 0.95 {
-                let c = Color(red: 216/255, green: 90/255, blue: 48/255)
-                return (c, c)
-            }
-            if progress.clampedPercent >= 0.80 {
-                let c = Color(red: 239/255, green: 159/255, blue: 39/255)
-                return (c, c)
-            }
-            return (hueColor(progress.accentHue), Color(red: 241/255, green: 239/255, blue: 232/255))
-        }()
-
-        return VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(progress.label)
-                    .font(AppFont.inter(size: 12, weight: .medium))
-                Spacer()
-                Text("\(TokenFormatter.compact(progress.used)) / \(TokenFormatter.compact(progress.total))")
-                    .font(AppFont.inter(size: 10))
-                    .foregroundColor(.white.opacity(0.45))
-                    .monospacedDigit()
-                Text("\(percent) %")
-                    .font(AppFont.inter(size: 11, weight: .medium))
-                    .foregroundColor(textColor)
-                    .monospacedDigit()
-            }
-            Text(progress.sublabel)
-                .font(AppFont.inter(size: 10))
-                .foregroundColor(.white.opacity(0.4))
-
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 999)
-                        .fill(Color.white.opacity(0.08))
-                        .frame(height: emphasized ? 6 : 5)
-                    RoundedRectangle(cornerRadius: 999)
-                        .fill(barColor)
-                        .frame(
-                            width: max(2, geo.size.width * progress.clampedPercent),
-                            height: emphasized ? 6 : 5
-                        )
+        return card {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 6) {
+                        Text(primary)
+                            .font(AppFont.inter(size: 22, weight: .semibold))
+                            .monospacedDigit()
+                        Text("\u{00B7}")
+                            .foregroundColor(.white.opacity(0.3))
+                        Text(secondary)
+                            .font(AppFont.inter(size: 13))
+                            .foregroundColor(.white.opacity(0.5))
+                            .monospacedDigit()
+                    }
+                    Text("\u{00C9}quivalent API")
+                        .font(AppFont.inter(size: 10))
+                        .foregroundColor(.white.opacity(0.35))
                 }
+                Spacer()
             }
-            .frame(height: emphasized ? 6 : 5)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .background(Color.white.opacity(0.04))
-        .clipShape(RoundedRectangle(cornerRadius: 10))
-        .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .strokeBorder(
-                    (emphasized && progress.clampedPercent >= 0.70)
-                        ? barColor.opacity(0.35)
-                        : Color.clear,
-                    lineWidth: 0.5
-                )
-        )
     }
 
-    private func hueColor(_ hue: LimitProgress.Hue) -> Color {
-        switch hue {
-        case .blue:   return Color(red: 55/255, green: 138/255, blue: 221/255)
-        case .green:  return Color(red: 29/255, green: 158/255, blue: 117/255)
-        case .orange: return Color(red: 217/255, green: 119/255, blue: 87/255)
-        case .gray:   return Color.gray
+    // MARK: - Model cards
+
+    private var modelCards: some View {
+        let today = store.snapshot.todayByModel
+        return HStack(spacing: 8) {
+            modelCard(key: "opus", label: "Opus", color: Color(red: 83/255, green: 74/255, blue: 183/255), usage: today["opus"])
+            modelCard(key: "sonnet", label: "Sonnet", color: Color(red: 29/255, green: 158/255, blue: 117/255), usage: today["sonnet"])
+            modelCard(key: "haiku", label: "Haiku", color: Color(red: 186/255, green: 117/255, blue: 23/255), usage: today["haiku"])
         }
+    }
+
+    private func modelCard(key: String, label: String, color: Color, usage: ModelUsage?) -> some View {
+        let hasCost = (usage?.estimatedCost ?? 0) > 0
+        let costStr = hasCost ? CostFormatter.format(usage!.estimatedCost) : "\u{2014}"
+        let tokStr = hasCost ? "\(TokenFormatter.compact(usage!.totalTokens)) tk" : "\u{2014}"
+        let primary: String
+        let secondary: String
+        if store.displayFormat == .cost {
+            primary = costStr
+            secondary = tokStr
+        } else {
+            primary = tokStr
+            secondary = costStr
+        }
+
+        return card {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(hasCost ? color : Color.gray.opacity(0.3))
+                        .frame(width: 10, height: 10)
+                    Text(label)
+                        .font(AppFont.inter(size: 11, weight: .medium))
+                        .foregroundColor(hasCost ? fg : .white.opacity(0.35))
+                }
+                Text(primary)
+                    .font(AppFont.inter(size: 14, weight: .semibold))
+                    .foregroundColor(hasCost ? fg : .white.opacity(0.25))
+                    .monospacedDigit()
+                Text(secondary)
+                    .font(AppFont.inter(size: 10))
+                    .foregroundColor(hasCost ? .white.opacity(0.45) : .white.opacity(0.2))
+                    .monospacedDigit()
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    // MARK: - Session card
+
+    private var sessionCard: some View {
+        let costStr = CostFormatter.format(store.snapshot.sessionCost)
+        let tokStr = TokenFormatter.compact(store.snapshot.sessionTokensRaw)
+        let primary = store.displayFormat == .cost ? costStr : "\(tokStr) tokens"
+
+        return card {
+            HStack {
+                Text(primary)
+                    .font(AppFont.inter(size: 14, weight: .semibold))
+                    .monospacedDigit()
+                Text("\u{00B7}")
+                    .foregroundColor(.white.opacity(0.3))
+                Text(store.sessionResetLabel)
+                    .font(AppFont.inter(size: 11))
+                    .foregroundColor(.white.opacity(0.5))
+                Spacer()
+            }
+        }
+    }
+
+    // MARK: - Week card
+
+    private var weekCard: some View {
+        let costStr = CostFormatter.format(store.snapshot.weekTotalCost)
+        let tokStr = TokenFormatter.compact(store.snapshot.weekTotalTokens)
+        let primary = store.displayFormat == .cost ? costStr : "\(tokStr) tokens"
+
+        return card {
+            HStack {
+                Text(primary)
+                    .font(AppFont.inter(size: 14, weight: .semibold))
+                    .monospacedDigit()
+                Text("\u{00B7}")
+                    .foregroundColor(.white.opacity(0.3))
+                Text(store.weeklyResetLabel)
+                    .font(AppFont.inter(size: 11))
+                    .foregroundColor(.white.opacity(0.5))
+                Spacer()
+            }
+        }
+    }
+
+    // MARK: - Top project
+
+    private func topProjectRow(name: String, cost: Double) -> some View {
+        HStack(spacing: 4) {
+            Text("Top projet : \(name)")
+                .font(AppFont.inter(size: 10))
+                .foregroundColor(.white.opacity(0.4))
+            Text("\u{00B7}")
+                .foregroundColor(.white.opacity(0.2))
+            Text(CostFormatter.format(cost))
+                .font(AppFont.inter(size: 10, weight: .medium))
+                .foregroundColor(.white.opacity(0.5))
+                .monospacedDigit()
+        }
+    }
+
+    // MARK: - Section title
+
+    private func sectionTitle(_ text: String) -> some View {
+        Text(text)
+            .font(AppFont.inter(size: 11, weight: .medium))
+            .foregroundColor(.white.opacity(0.45))
+    }
+
+    // MARK: - Card helper
+
+    private func card<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        content()
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(Color.white.opacity(0.04))
+            .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 
     // MARK: - Footer
@@ -226,38 +299,20 @@ struct DropdownView: View {
                     Image(systemName: "arrow.clockwise").font(.system(size: 10))
                     Text("Actualiser").font(AppFont.inter(size: 11))
                 }.foregroundColor(.white.opacity(0.6))
-            }
-            .buttonStyle(.plain)
+            }.buttonStyle(.plain)
 
-            Button(action: openLogsFolder) {
+            Button(action: { NSWorkspace.shared.open(LogScanner.shared.claudeProjectsDir) }) {
                 HStack(spacing: 4) {
                     Image(systemName: "folder").font(.system(size: 10))
                     Text("Logs").font(AppFont.inter(size: 11))
                 }.foregroundColor(.white.opacity(0.6))
-            }
-            .buttonStyle(.plain)
+            }.buttonStyle(.plain)
 
             Spacer()
 
             Button(action: { NSApp.terminate(nil) }) {
-                Text("Quitter")
-                    .font(AppFont.inter(size: 11))
-                    .foregroundColor(.white.opacity(0.5))
-            }
-            .buttonStyle(.plain)
+                Text("Quitter").font(AppFont.inter(size: 11)).foregroundColor(.white.opacity(0.5))
+            }.buttonStyle(.plain)
         }
-    }
-
-    private func relativeTime(_ date: Date?) -> String {
-        guard let date = date else { return "\u{2014}" }
-        let seconds = Date().timeIntervalSince(date)
-        if seconds < 60 { return "\u{00E0} l'instant" }
-        if seconds < 3600 { return "il y a \(Int(seconds / 60)) min" }
-        if seconds < 86400 { return "il y a \(Int(seconds / 3600))h" }
-        return "il y a \(Int(seconds / 86400))j"
-    }
-
-    private func openLogsFolder() {
-        NSWorkspace.shared.open(LogScanner.shared.claudeProjectsDir)
     }
 }
