@@ -190,7 +190,7 @@ struct PreferencesView: View {
                     .foregroundColor(tintBlue)
             }
             Spacer()
-            Text("v0.2.1")
+            Text("v0.3.0")
                 .font(AppFont.inter(size: 10))
                 .foregroundColor(.white.opacity(0.3))
         }
