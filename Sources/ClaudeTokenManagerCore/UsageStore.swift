@@ -28,6 +28,14 @@ public final class UsageStore: ObservableObject {
         didSet { UserDefaults.standard.set(launchAtLoginEnabled, forKey: "launchAtLoginEnabled") }
     }
 
+    /// The active data source. For v0.3.0 this is always LocalLogsDataSource.
+    /// In v0.3.1+ it can switch to ClaudeAIDataSource if the user enables it.
+    private var primaryDataSource: any DataSource = LocalLogsDataSource()
+    private var fallbackDataSource: any DataSource = LocalLogsDataSource()
+
+    /// Which source produced the current snapshot.
+    @Published public private(set) var activeSourceId: String = "local-logs"
+
     private var refreshTask: Task<Void, Never>?
     private var fileWatcher: FileWatcher?
 
@@ -68,11 +76,16 @@ public final class UsageStore: ObservableObject {
     deinit { refreshTask?.cancel() }
 
     public func refresh() {
-        Task.detached(priority: .userInitiated) { [weak self] in
-            let newSnapshot = LogScanner.shared.scan()
+        let primary = primaryDataSource
+        let fallback = fallbackDataSource
+        Task.detached(priority: .userInitiated) {
+            let (newSnapshot, sourceId) = await Self.fetchWithFallback(
+                primary: primary, fallback: fallback
+            )
             await MainActor.run { [weak self] in
                 guard let self else { return }
                 self.snapshot = newSnapshot
+                self.activeSourceId = sourceId
                 self.isLoading = false
                 if self.selectedProjectId != UsageSnapshot.allProjectsId,
                    !newSnapshot.projects.contains(where: { $0.id == self.selectedProjectId }) {
@@ -81,6 +94,28 @@ public final class UsageStore: ObservableObject {
                 self.evaluateBudgetNotifications()
             }
         }
+    }
+
+    private static func fetchWithFallback(
+        primary: any DataSource, fallback: any DataSource
+    ) async -> (UsageSnapshot, String) {
+        do {
+            let snapshot = try await primary.fetch()
+            return (snapshot, primary.id)
+        } catch {
+            NSLog("Primary data source failed: \(error.localizedDescription)")
+        }
+
+        if primary.id != fallback.id {
+            do {
+                let snapshot = try await fallback.fetch()
+                return (snapshot, fallback.id)
+            } catch {
+                NSLog("Fallback data source also failed: \(error.localizedDescription)")
+            }
+        }
+
+        return (UsageSnapshot(), "none")
     }
 
     private func evaluateBudgetNotifications() {

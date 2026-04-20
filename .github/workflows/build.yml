@@ -18,6 +18,9 @@ jobs:
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode.app
 
+      - name: Run tests
+        run: swift test
+
       - name: Build release
         run: ./build.sh release
 
