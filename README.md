@@ -13,7 +13,7 @@ A native macOS menu bar app that mirrors Claude's plan usage limits — powered 
 
 ## Install
 
-Download the latest `.zip` from the [Releases page](https://github.com/USERNAME/claude-token-manager/releases/latest), unzip, drag to `/Applications`, launch.
+Download the latest `.zip` from the [Releases page](https://github.com/LuCodes/claude-token-manager/releases/latest), unzip, drag to `/Applications`, launch.
 
 First time you open an ad-hoc signed app: right-click → Open → Open. macOS prompts once, then trusts it.
 
@@ -21,7 +21,7 @@ First time you open an ad-hoc signed app: right-click → Open → Open. macOS p
 
 ```bash
 curl -L -o /tmp/ctb.zip \
-  "https://github.com/USERNAME/claude-token-manager/releases/latest/download/ClaudeTokenManager.zip" && \
+  "https://github.com/LuCodes/claude-token-manager/releases/latest/download/ClaudeTokenManager.zip" && \
   unzip -o /tmp/ctb.zip -d /Applications/ && \
   xattr -dr com.apple.quarantine "/Applications/Claude Token Manager.app" && \
   open "/Applications/Claude Token Manager.app"
@@ -30,7 +30,7 @@ curl -L -o /tmp/ctb.zip \
 ## Build from source
 
 ```bash
-git clone https://github.com/USERNAME/claude-token-manager
+git clone https://github.com/LuCodes/claude-token-manager
 cd claude-token-manager
 ./build.sh release
 mv "build/Claude Token Manager.app" /Applications/
