@@ -35,11 +35,17 @@ struct MenuBarLabel: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            Image("MenuBarIcon", bundle: .module)
-                .renderingMode(.template)
-                .resizable()
-                .scaledToFit()
-                .frame(width: 15, height: 15)
+            Group {
+                if Bundle.module.image(forResource: NSImage.Name("MenuBarIcon")) != nil {
+                    Image("MenuBarIcon", bundle: .module)
+                        .renderingMode(.template)
+                        .resizable()
+                        .scaledToFit()
+                } else {
+                    Image(systemName: "sparkles")
+                }
+            }
+            .frame(width: 15, height: 15)
             Text(labelText)
                 .font(AppFont.inter(size: 11, weight: .medium))
                 .monospacedDigit()
@@ -47,19 +53,25 @@ struct MenuBarLabel: View {
         .foregroundColor(labelColor)
     }
 
+    /// In claude.ai mode, always show the Session (5h) bar — it's the most
+    /// actionable metric since it resets frequently.
+    private var sessionBar: RemoteProgressBar? {
+        store.snapshot.remoteProgressBars.first { $0.id == "session" }
+    }
+
     private var labelText: String {
-        if let hottest = store.snapshot.hottestRemoteBar {
-            return "\(Int(hottest.clampedPercent.rounded(.down))) %"
+        if let session = sessionBar {
+            return "\(Int(session.clampedPercent.rounded(.down))) %"
         }
         return store.compactLabel
     }
 
     private var labelColor: Color {
-        guard let hottest = store.snapshot.hottestRemoteBar else {
+        guard let session = sessionBar else {
             return store.menuBarTint
         }
-        if hottest.percent >= 95 { return Color(red: 216/255, green: 90/255, blue: 48/255) }
-        if hottest.percent >= 80 { return Color(red: 239/255, green: 159/255, blue: 39/255) }
+        if session.percent >= 95 { return Color(red: 216/255, green: 90/255, blue: 48/255) }
+        if session.percent >= 80 { return Color(red: 239/255, green: 159/255, blue: 39/255) }
         return .primary
     }
 }

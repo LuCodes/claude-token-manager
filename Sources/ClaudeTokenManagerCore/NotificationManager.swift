@@ -64,6 +64,51 @@ public final class NotificationManager {
         pruneOldEntries()
     }
 
+    /// Evaluate a claude.ai progress bar and fire notification if it crosses a threshold.
+    /// Uses bar.id + windowEnd as dedup key so each bar fires independently per reset window.
+    public func evaluateProgressBar(_ bar: RemoteProgressBar) {
+        let percent = Int(bar.clampedPercent.rounded(.down))
+        let today = Calendar.current.startOfDay(for: Date())
+        let windowEnd = bar.resetsAt ?? today.addingTimeInterval(24 * 3600)
+
+        for threshold in Threshold.allCases where percent >= threshold.rawValue {
+            let key = "bar-\(bar.id)-\(threshold.rawValue)-\(Int(windowEnd.timeIntervalSince1970))"
+            if firedAlerts[key] != nil { continue }
+            fireProgressBarNotification(bar: bar, percent: percent, threshold: threshold)
+            var updated = firedAlerts
+            updated[key] = Date()
+            firedAlerts = updated
+        }
+        pruneOldEntries()
+    }
+
+    /// Check if a notification has already been fired for a given bar+threshold combo.
+    internal func hasFired(barId: String, threshold: Threshold, windowEnd: Date) -> Bool {
+        let key = "bar-\(barId)-\(threshold.rawValue)-\(Int(windowEnd.timeIntervalSince1970))"
+        return firedAlerts[key] != nil
+    }
+
+    private func fireProgressBarNotification(bar: RemoteProgressBar, percent: Int, threshold: Threshold) {
+        let content = UNMutableNotificationContent()
+        content.title = "\(bar.label) \u{00E0} \(threshold.label)"
+        if let resetsAt = bar.resetsAt {
+            let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "fr_FR")
+            formatter.dateFormat = "EEE HH:mm"
+            content.body = "R\u{00E9}initialisation \(formatter.string(from: resetsAt))"
+        } else {
+            content.body = "\(percent) % atteints"
+        }
+        content.sound = nil
+
+        let request = UNNotificationRequest(
+            identifier: UUID().uuidString,
+            content: content,
+            trigger: nil
+        )
+        center.add(request) { _ in }
+    }
+
     public func clearAllFiredAlerts() {
         UserDefaults.standard.removeObject(forKey: dedupKey)
     }

@@ -20,18 +20,29 @@ This app measures your Claude Code usage from local logs and calculates costs at
 
 ## Install
 
-Download the latest `.zip` from the [Releases page](https://github.com/LuCodes/claude-token-manager/releases/latest), unzip, drag to `/Applications`, launch.
+### Via Homebrew (recommended)
+
+```bash
+brew tap LuCodes/claude-token-manager
+brew install --cask claude-token-manager
+```
+
+The app lands in `/Applications`. Launch it from the Launchpad or:
+
+```bash
+open "/Applications/Claude Token Manager.app"
+```
+
+### Manual install
+
+Download the latest `.zip` from the [Releases page](https://github.com/LuCodes/claude-token-manager/releases/latest), unzip, drag to `/Applications`.
 
 First time you open an ad-hoc signed app: right-click → Open → Open.
 
-### One-liner install
+### Update
 
 ```bash
-curl -L -o /tmp/ctm.zip \
-  "https://github.com/LuCodes/claude-token-manager/releases/latest/download/ClaudeTokenManager.zip" && \
-  unzip -o /tmp/ctm.zip -d /Applications/ && \
-  xattr -dr com.apple.quarantine "/Applications/Claude Token Manager.app" && \
-  open "/Applications/Claude Token Manager.app"
+brew upgrade --cask claude-token-manager
 ```
 
 ## Build from source
