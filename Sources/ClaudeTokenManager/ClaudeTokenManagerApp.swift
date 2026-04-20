@@ -61,7 +61,7 @@ struct MenuBarLabel: View {
 
     private var labelText: String {
         if let session = sessionBar {
-            return "\(Int(session.clampedPercent.rounded(.down))) %"
+            return String(format: "%d%%", Int(session.clampedPercent.rounded(.down)))
         }
         return store.compactLabel
     }

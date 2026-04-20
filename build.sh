@@ -49,6 +49,12 @@ elif [ -f "AppIcon.icns" ]; then
     cp AppIcon.icns "$APP_BUNDLE/Contents/Resources/"
 fi
 
+# Copy notification icon to bundle Resources
+NOTIF_ICON="Sources/ClaudeTokenManager/Resources/NotificationIcon.png"
+if [ -f "$NOTIF_ICON" ]; then
+    cp "$NOTIF_ICON" "$APP_BUNDLE/Contents/Resources/"
+fi
+
 echo "→ Ad-hoc signing (for local use)..."
 codesign --force --deep --sign - "$APP_BUNDLE"
 

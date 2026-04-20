@@ -62,7 +62,7 @@ struct DropdownView: View {
             Circle()
                 .fill(Color(red: 29/255, green: 158/255, blue: 117/255))
                 .frame(width: 6, height: 6)
-            Text("Chiffres r\u{00E9}els claude.ai")
+            Text("Live data from claude.ai")
                 .font(AppFont.inter(size: 10))
                 .foregroundColor(.white.opacity(0.6))
         }
@@ -77,7 +77,7 @@ struct DropdownView: View {
             Circle()
                 .fill(Color(red: 216/255, green: 90/255, blue: 48/255))
                 .frame(width: 6, height: 6)
-            Text("Session claude.ai expir\u{00E9}e")
+            Text("claude.ai session expired")
                 .font(AppFont.inter(size: 10))
                 .foregroundColor(Color(red: 216/255, green: 90/255, blue: 48/255))
         }
@@ -97,7 +97,7 @@ struct DropdownView: View {
 
             if !weeklyBars.isEmpty {
                 HStack {
-                    Text("Limites hebdomadaires")
+                    Text("Weekly limits")
                         .font(AppFont.inter(size: 13, weight: .medium))
                     Spacer()
                     Text(relativeTime(store.snapshot.lastUpdate))
@@ -122,7 +122,7 @@ struct DropdownView: View {
                 Text(bar.label)
                     .font(AppFont.inter(size: emphasized ? 13 : 12, weight: .medium))
                 Spacer()
-                Text("\(percent) % utilis\u{00E9}s")
+                Text("\(percent)% used")
                     .font(AppFont.inter(size: 11, weight: .medium))
                     .foregroundColor(bar.percent >= 80 ? color : .white.opacity(0.85))
                     .monospacedDigit()
@@ -173,17 +173,17 @@ struct DropdownView: View {
 
     private func resetLabel(for date: Date) -> String {
         let interval = date.timeIntervalSince(Date())
-        if interval < 0 { return "R\u{00E9}initialisation imminente" }
+        if interval < 0 { return "Resets imminently" }
         if interval < 24 * 3600 {
             let h = Int(interval) / 3600
             let m = (Int(interval) % 3600) / 60
-            if h > 0 { return "R\u{00E9}initialisation dans \(h) h \(m) min" }
-            return "R\u{00E9}initialisation dans \(m) min"
+            if h > 0 { return "Resets in \(h) h \(m) min" }
+            return "Resets in \(m) min"
         }
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "fr_FR")
+        formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "EEE HH:mm"
-        return "R\u{00E9}initialisation \(formatter.string(from: date))"
+        return "Resets \(formatter.string(from: date))"
     }
 
     // MARK: - Local detail (compact, shown below remote bars)
@@ -191,32 +191,17 @@ struct DropdownView: View {
     private var localDetailSection: some View {
         let tokens = store.selectedProject.todayTotalTokens
         let cost = store.selectedProject.todayTotalCost
-        let primaryLabel: String
-        let primaryValue: String
-        let secondaryLabel: String
-        let secondaryValue: String
-        if store.displayFormat == .cost {
-            primaryLabel = "Co\u{00FB}t \u{00E9}quiv. API"
-            primaryValue = CostFormatter.format(cost)
-            secondaryLabel = "Tokens"
-            secondaryValue = "\(TokenFormatter.compact(tokens)) tokens"
-        } else {
-            primaryLabel = "Tokens"
-            primaryValue = "\(TokenFormatter.compact(tokens)) tokens"
-            secondaryLabel = "Co\u{00FB}t \u{00E9}quiv. API"
-            secondaryValue = CostFormatter.format(cost)
-        }
 
         return VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("D\u{00E9}tail local (Claude Code)")
+                Text("Local detail (Claude Code)")
                     .font(AppFont.inter(size: 11, weight: .medium))
                     .foregroundColor(.white.opacity(0.5))
                 Spacer()
             }
             HStack(spacing: 12) {
-                compactMetric(label: primaryLabel, value: primaryValue)
-                compactMetric(label: secondaryLabel, value: secondaryValue)
+                compactMetric(label: "API equiv. cost", value: CostFormatter.format(cost))
+                compactMetric(label: "Tokens", value: "\(TokenFormatter.compact(tokens)) tokens")
             }
         }
         .padding(.horizontal, 12)
@@ -237,23 +222,23 @@ struct DropdownView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    // MARK: - Local main layout (unchanged from v1.0.1)
+    // MARK: - Local main layout
 
     @ViewBuilder
     private var localMainLayout: some View {
-        sectionTitle("Aujourd'hui")
+        sectionTitle("Today")
         Spacer().frame(height: 8)
         todayBigCard
         Spacer().frame(height: 12)
-        sectionTitle("R\u{00E9}partition par mod\u{00E8}le")
+        sectionTitle("Breakdown by model")
         Spacer().frame(height: 8)
         modelCards
         Spacer().frame(height: 12)
-        sectionTitle("Session active (5h)")
+        sectionTitle("Active session (5h)")
         Spacer().frame(height: 8)
         sessionCard
         Spacer().frame(height: 12)
-        sectionTitle("Cette semaine")
+        sectionTitle("This week")
         Spacer().frame(height: 8)
         weekCard
         if let top = store.snapshot.topProjectToday {
@@ -295,8 +280,8 @@ struct DropdownView: View {
         Menu {
             Button(action: { store.selectedProjectId = UsageSnapshot.allProjectsId }) {
                 if store.selectedProjectId == UsageSnapshot.allProjectsId {
-                    Label("Tous les projets", systemImage: "checkmark")
-                } else { Text("Tous les projets") }
+                    Label("All projects", systemImage: "checkmark")
+                } else { Text("All projects") }
             }
             if !store.snapshot.projects.isEmpty {
                 Divider()
@@ -316,7 +301,7 @@ struct DropdownView: View {
                    store.selectedProject.isActive {
                     Circle().fill(Color(red: 151/255, green: 196/255, blue: 89/255)).frame(width: 6, height: 6)
                 }
-                Text("Projet : \(store.selectedProject.displayName)")
+                Text("Project: \(store.selectedProject.displayName)")
                     .font(AppFont.inter(size: 11)).lineLimit(1).truncationMode(.tail)
                 Spacer(minLength: 4)
                 Image(systemName: "chevron.down").font(.system(size: 8, weight: .medium))
@@ -335,31 +320,22 @@ struct DropdownView: View {
     private var todayBigCard: some View {
         let cost = store.snapshot.todayTotalCost
         let tokens = store.snapshot.todayTotalTokens
-        let primary: String
-        let secondary: String
-        if store.displayFormat == .cost {
-            primary = CostFormatter.format(cost)
-            secondary = "\(TokenFormatter.compact(tokens)) tokens"
-        } else {
-            primary = "\(TokenFormatter.compact(tokens)) tokens"
-            secondary = CostFormatter.format(cost)
-        }
 
         return card {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 6) {
-                        Text(primary)
+                        Text(CostFormatter.format(cost))
                             .font(AppFont.inter(size: 22, weight: .semibold))
                             .monospacedDigit()
                         Text("\u{00B7}")
                             .foregroundColor(.white.opacity(0.3))
-                        Text(secondary)
+                        Text("\(TokenFormatter.compact(tokens)) tokens")
                             .font(AppFont.inter(size: 13))
                             .foregroundColor(.white.opacity(0.5))
                             .monospacedDigit()
                     }
-                    Text("\u{00C9}quivalent API")
+                    Text("API equivalent")
                         .font(AppFont.inter(size: 10))
                         .foregroundColor(.white.opacity(0.35))
                 }
@@ -383,15 +359,6 @@ struct DropdownView: View {
         let hasCost = (usage?.estimatedCost ?? 0) > 0
         let costStr = hasCost ? CostFormatter.format(usage!.estimatedCost) : "\u{2014}"
         let tokStr = hasCost ? "\(TokenFormatter.compact(usage!.totalTokens)) tk" : "\u{2014}"
-        let primary: String
-        let secondary: String
-        if store.displayFormat == .cost {
-            primary = costStr
-            secondary = tokStr
-        } else {
-            primary = tokStr
-            secondary = costStr
-        }
 
         return card {
             VStack(alignment: .leading, spacing: 6) {
@@ -403,11 +370,11 @@ struct DropdownView: View {
                         .font(AppFont.inter(size: 11, weight: .medium))
                         .foregroundColor(hasCost ? fg : .white.opacity(0.35))
                 }
-                Text(primary)
+                Text(costStr)
                     .font(AppFont.inter(size: 14, weight: .semibold))
                     .foregroundColor(hasCost ? fg : .white.opacity(0.25))
                     .monospacedDigit()
-                Text(secondary)
+                Text(tokStr)
                     .font(AppFont.inter(size: 10))
                     .foregroundColor(hasCost ? .white.opacity(0.45) : .white.opacity(0.2))
                     .monospacedDigit()
@@ -421,12 +388,17 @@ struct DropdownView: View {
     private var sessionCard: some View {
         let costStr = CostFormatter.format(store.snapshot.sessionCost)
         let tokStr = TokenFormatter.compact(store.snapshot.sessionTokens)
-        let primary = store.displayFormat == .cost ? costStr : "\(tokStr) tokens"
 
         return card {
             HStack {
-                Text(primary)
+                Text(costStr)
                     .font(AppFont.inter(size: 14, weight: .semibold))
+                    .monospacedDigit()
+                Text("\u{00B7}")
+                    .foregroundColor(.white.opacity(0.3))
+                Text("\(tokStr) tokens")
+                    .font(AppFont.inter(size: 11))
+                    .foregroundColor(.white.opacity(0.5))
                     .monospacedDigit()
                 Text("\u{00B7}")
                     .foregroundColor(.white.opacity(0.3))
@@ -443,12 +415,17 @@ struct DropdownView: View {
     private var weekCard: some View {
         let costStr = CostFormatter.format(store.snapshot.weekTotalCost)
         let tokStr = TokenFormatter.compact(store.snapshot.weekTotalTokens)
-        let primary = store.displayFormat == .cost ? costStr : "\(tokStr) tokens"
 
         return card {
             HStack {
-                Text(primary)
+                Text(costStr)
                     .font(AppFont.inter(size: 14, weight: .semibold))
+                    .monospacedDigit()
+                Text("\u{00B7}")
+                    .foregroundColor(.white.opacity(0.3))
+                Text("\(tokStr) tokens")
+                    .font(AppFont.inter(size: 11))
+                    .foregroundColor(.white.opacity(0.5))
                     .monospacedDigit()
                 Text("\u{00B7}")
                     .foregroundColor(.white.opacity(0.3))
@@ -464,7 +441,7 @@ struct DropdownView: View {
 
     private func topProjectRow(name: String, cost: Double) -> some View {
         HStack(spacing: 4) {
-            Text("Top projet : \(name)")
+            Text("Top project: \(name)")
                 .font(AppFont.inter(size: 10))
                 .foregroundColor(.white.opacity(0.4))
             Text("\u{00B7}")
@@ -497,10 +474,10 @@ struct DropdownView: View {
     private func relativeTime(_ date: Date?) -> String {
         guard let date = date else { return "\u{2014}" }
         let seconds = Date().timeIntervalSince(date)
-        if seconds < 60 { return "\u{00E0} l'instant" }
-        if seconds < 3600 { return "il y a \(Int(seconds / 60)) min" }
-        if seconds < 86400 { return "il y a \(Int(seconds / 3600))h" }
-        return "il y a \(Int(seconds / 86400))j"
+        if seconds < 60 { return "just now" }
+        if seconds < 3600 { return "\(Int(seconds / 60)) min ago" }
+        if seconds < 86400 { return "\(Int(seconds / 3600))h ago" }
+        return "\(Int(seconds / 86400))d ago"
     }
 
     // MARK: - Footer
@@ -510,7 +487,7 @@ struct DropdownView: View {
             Button(action: { store.refresh() }) {
                 HStack(spacing: 4) {
                     Image(systemName: "arrow.clockwise").font(.system(size: 10))
-                    Text("Actualiser").font(AppFont.inter(size: 11))
+                    Text("Refresh").font(AppFont.inter(size: 11))
                 }.foregroundColor(.white.opacity(0.6))
             }.buttonStyle(.plain)
 
@@ -524,7 +501,7 @@ struct DropdownView: View {
             Spacer()
 
             Button(action: { NSApp.terminate(nil) }) {
-                Text("Quitter").font(AppFont.inter(size: 11)).foregroundColor(.white.opacity(0.5))
+                Text("Quit").font(AppFont.inter(size: 11)).foregroundColor(.white.opacity(0.5))
             }.buttonStyle(.plain)
         }
     }
