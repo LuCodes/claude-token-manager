@@ -49,12 +49,13 @@ elif [ -f "AppIcon.icns" ]; then
     cp AppIcon.icns "$APP_BUNDLE/Contents/Resources/"
 fi
 
-# Copy SPM module bundle (contains Assets.xcassets with MenuBarIcon)
-ARCH=$(uname -m)
-MODULE_BUNDLE=".build/${ARCH}-apple-macosx/${CONFIG}/${EXECUTABLE}_${EXECUTABLE}.bundle"
-if [ -d "$MODULE_BUNDLE" ]; then
-    cp -R "$MODULE_BUNDLE" "$APP_BUNDLE/Contents/Resources/"
-    echo "  ✓ Module bundle copied"
+# Generate and copy menu bar icon PDF directly into Resources
+if command -v rsvg-convert &> /dev/null && [ -f "assets/menu-bar-icon.svg" ]; then
+    rsvg-convert -f pdf "assets/menu-bar-icon.svg" -o "$APP_BUNDLE/Contents/Resources/MenuBarIcon.pdf"
+    echo "  ✓ MenuBarIcon.pdf generated"
+elif [ -f "Sources/ClaudeTokenManager/Resources/Assets.xcassets/MenuBarIcon.imageset/MenuBarIcon.pdf" ]; then
+    cp "Sources/ClaudeTokenManager/Resources/Assets.xcassets/MenuBarIcon.imageset/MenuBarIcon.pdf" "$APP_BUNDLE/Contents/Resources/"
+    echo "  ✓ MenuBarIcon.pdf copied (fallback)"
 fi
 
 # Copy notification icon to bundle Resources
