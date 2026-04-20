@@ -225,7 +225,7 @@ public struct UsageSnapshot {
         if projectId == Self.allProjectsId {
             return ProjectUsage(
                 id: Self.allProjectsId,
-                displayName: "Tous les projets",
+                displayName: "All projects",
                 todayByModel: todayByModel,
                 monthByModel: monthByModel,
                 sessionsToday: totalSessionsToday,
@@ -300,20 +300,6 @@ public enum LimitCalculator {
         }
         let end = cal.date(byAdding: .day, value: 7, to: start) ?? start
         return .week(start: start, end: end)
-    }
-}
-
-// MARK: - Display format
-
-public enum DisplayFormat: String, CaseIterable {
-    case cost = "cost"
-    case tokens = "tokens"
-
-    public var label: String {
-        switch self {
-        case .cost: return "Co\u{00FB}t \u{00E9}quivalent API"
-        case .tokens: return "Tokens"
-        }
     }
 }
 

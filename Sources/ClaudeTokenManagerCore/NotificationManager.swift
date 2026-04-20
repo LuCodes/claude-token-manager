@@ -15,8 +15,8 @@ public final class NotificationManager {
 
         public var label: String {
             switch self {
-            case .warning: return "80 %"
-            case .critical: return "95 %"
+            case .warning: return "80%"
+            case .critical: return "95%"
             }
         }
     }
@@ -98,20 +98,30 @@ public final class NotificationManager {
         return UNUserNotificationCenter.current()
     }
 
+    private func buildIconAttachment() -> UNNotificationAttachment? {
+        guard let iconURL = Bundle.main.url(forResource: "NotificationIcon", withExtension: "png") else {
+            return nil
+        }
+        return try? UNNotificationAttachment(identifier: "icon", url: iconURL, options: nil)
+    }
+
     private func fireBudgetNotification(currentValue: Double, budget: Double, isMoney: Bool, threshold: Threshold) {
         let content = UNMutableNotificationContent()
-        content.title = "Budget quotidien \u{00E0} \(threshold.label)"
+        content.title = "Daily budget at \(threshold.label)"
 
         if isMoney {
             let remaining = max(0, budget - currentValue)
-            content.body = "\(CostFormatter.format(currentValue)) sur \(CostFormatter.format(budget)) \u{00B7} il reste \(CostFormatter.format(remaining))"
+            content.body = "\(CostFormatter.format(currentValue)) of \(CostFormatter.format(budget)) \u{00B7} \(CostFormatter.format(remaining)) remaining"
         } else {
             let used = TokenFormatter.compact(Int(currentValue))
             let total = TokenFormatter.compact(Int(budget))
             let remaining = TokenFormatter.compact(max(0, Int(budget - currentValue)))
-            content.body = "\(used) sur \(total) tokens \u{00B7} il reste \(remaining)"
+            content.body = "\(used) of \(total) tokens \u{00B7} \(remaining) remaining"
         }
         content.sound = nil
+        if let attachment = buildIconAttachment() {
+            content.attachments = [attachment]
+        }
 
         let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
         notificationCenter()?.add(request) { _ in }
@@ -119,19 +129,34 @@ public final class NotificationManager {
 
     private func fireProgressBarNotification(bar: RemoteProgressBar, percent: Int, threshold: Threshold) {
         let content = UNMutableNotificationContent()
-        content.title = "\(bar.label) \u{00E0} \(threshold.label)"
+        content.title = "\(bar.label) at \(threshold.label)"
         if let resetsAt = bar.resetsAt {
-            let formatter = DateFormatter()
-            formatter.locale = Locale(identifier: "fr_FR")
-            formatter.dateFormat = "EEE HH:mm"
-            content.body = "R\u{00E9}initialisation \(formatter.string(from: resetsAt))"
+            content.body = relativeResetLabel(for: resetsAt)
         } else {
-            content.body = "\(percent) % atteints"
+            content.body = "\(percent)% used"
         }
         content.sound = nil
+        if let attachment = buildIconAttachment() {
+            content.attachments = [attachment]
+        }
 
         let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
         notificationCenter()?.add(request) { _ in }
+    }
+
+    private func relativeResetLabel(for date: Date) -> String {
+        let interval = date.timeIntervalSince(Date())
+        if interval < 0 { return "Resets imminently" }
+        if interval < 24 * 3600 {
+            let h = Int(interval) / 3600
+            let m = (Int(interval) % 3600) / 60
+            if h > 0 { return "Resets in \(h) h \(m) min" }
+            return "Resets in \(m) min"
+        }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "EEE HH:mm"
+        return "Resets \(formatter.string(from: date))"
     }
 
     private func pruneOldEntries() {

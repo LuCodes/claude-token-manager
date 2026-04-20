@@ -9,9 +9,6 @@ public final class UsageStore: ObservableObject {
     @Published public var selectedProjectId: String {
         didSet { UserDefaults.standard.set(selectedProjectId, forKey: "selectedProjectId") }
     }
-    @Published public var displayFormat: DisplayFormat {
-        didSet { UserDefaults.standard.set(displayFormat.rawValue, forKey: "displayFormat") }
-    }
     @Published public var dailyBudgetValue: Double? {
         didSet {
             if let v = dailyBudgetValue {
@@ -62,9 +59,6 @@ public final class UsageStore: ObservableObject {
     public init() {
         self.selectedProjectId = UserDefaults.standard.string(forKey: "selectedProjectId")
             ?? UsageSnapshot.allProjectsId
-
-        let fmtRaw = UserDefaults.standard.string(forKey: "displayFormat") ?? DisplayFormat.cost.rawValue
-        self.displayFormat = DisplayFormat(rawValue: fmtRaw) ?? .cost
 
         if UserDefaults.standard.object(forKey: "dailyBudgetValue") != nil {
             self.dailyBudgetValue = UserDefaults.standard.double(forKey: "dailyBudgetValue")
@@ -273,10 +267,7 @@ public final class UsageStore: ObservableObject {
     // MARK: - Menu bar label
 
     public var compactLabel: String {
-        switch displayFormat {
-        case .cost:  return CostFormatter.format(snapshot.todayTotalCost)
-        case .tokens: return TokenFormatter.compact(snapshot.todayTotalTokens)
-        }
+        CostFormatter.format(snapshot.todayTotalCost)
     }
 
     public var menuBarTint: Color {
@@ -293,22 +284,22 @@ public final class UsageStore: ObservableObject {
     // MARK: - Session info
 
     public var sessionResetLabel: String {
-        guard let end = snapshot.sessionEnd else { return "Pas de session active" }
+        guard let end = snapshot.sessionEnd else { return "No active session" }
         let remaining = end.timeIntervalSince(Date())
-        if remaining <= 0 { return "R\u{00E9}initialis\u{00E9}e" }
+        if remaining <= 0 { return "Reset" }
         let hours = Int(remaining) / 3600
         let minutes = (Int(remaining) % 3600) / 60
-        if hours > 0 { return "reset dans \(hours) h \(minutes) min" }
-        return "reset dans \(minutes) min"
+        if hours > 0 { return "resets in \(hours) h \(minutes) min" }
+        return "resets in \(minutes) min"
     }
 
     public var weeklyResetLabel: String {
         let window = LimitCalculator.currentWeekWindow()
         guard case .week(_, let end) = window else { return "\u{2014}" }
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "fr_FR")
+        formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "EEE HH:mm"
-        return "reset \(formatter.string(from: end))"
+        return "resets \(formatter.string(from: end))"
     }
 }
 
