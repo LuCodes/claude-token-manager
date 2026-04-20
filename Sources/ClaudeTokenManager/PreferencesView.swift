@@ -9,6 +9,8 @@ struct PreferencesView: View {
         VStack(alignment: .leading, spacing: 0) {
             header
             Spacer().frame(height: 14)
+            launchAtLoginCard
+            Spacer().frame(height: 10)
             notificationsCard
             Spacer().frame(height: 10)
             infoCard
@@ -33,8 +35,35 @@ struct PreferencesView: View {
             Text("Préférences")
                 .font(AppFont.inter(size: 13, weight: .medium))
             Spacer()
-            Spacer().frame(width: 56) // balance for centered title
+            Spacer().frame(width: 56)
         }
+    }
+
+    private var launchAtLoginCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Lancer au démarrage")
+                        .font(AppFont.inter(size: 12, weight: .medium))
+                    Text("L'icône apparaîtra dans la barre de menu à chaque ouverture de session")
+                        .font(AppFont.inter(size: 10))
+                        .foregroundColor(.white.opacity(0.5))
+                }
+                Spacer()
+                Toggle("", isOn: $store.launchAtLoginEnabled)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                    .tint(Color(red: 55/255, green: 138/255, blue: 221/255))
+                    .onChange(of: store.launchAtLoginEnabled) { newValue in
+                        LoginItem.setEnabled(newValue)
+                    }
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(Color.white.opacity(0.04))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 
     private var notificationsCard: some View {
@@ -94,7 +123,7 @@ struct PreferencesView: View {
             Text("Logs locaux de Claude Code (~/.claude/projects)")
                 .font(AppFont.inter(size: 10))
                 .foregroundColor(.white.opacity(0.5))
-            Text("Les pourcentages sont des estimations basées sur les seuils annoncés pour le forfait \(store.selectedPlan.rawValue).")
+            Text("Les pourcentages sont relatifs à vos pics d'utilisation sur les 30 derniers jours.")
                 .font(AppFont.inter(size: 10))
                 .foregroundColor(.white.opacity(0.4))
                 .fixedSize(horizontal: false, vertical: true)
@@ -118,7 +147,7 @@ struct PreferencesView: View {
                     .foregroundColor(Color(red: 55/255, green: 138/255, blue: 221/255))
             }
             Spacer()
-            Text("v0.1.0")
+            Text("v0.1.1")
                 .font(AppFont.inter(size: 10))
                 .foregroundColor(.white.opacity(0.3))
         }

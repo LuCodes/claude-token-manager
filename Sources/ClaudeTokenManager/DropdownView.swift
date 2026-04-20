@@ -28,23 +28,20 @@ struct DropdownView: View {
     private var mainContent: some View {
         header
         Spacer().frame(height: 12)
-        planAndProjectPickers
+        projectMenu
         Spacer().frame(height: 12)
         sessionLimitCard
         Spacer().frame(height: 12)
         weeklyHeader
         Spacer().frame(height: 8)
-        progressRow(store.weeklyAllModelsProgress)
+        progressRow(store.weeklyTotalProgress)
+        Spacer().frame(height: 8)
+        progressRow(store.weeklyOpusProgress)
         Spacer().frame(height: 8)
         progressRow(store.weeklySonnetProgress)
-        Spacer().frame(height: 8)
-        if let opus = store.weeklyOpusProgress {
-            progressRow(opus, emphasized: opus.isHot)
-        } else {
-            Text("Opus non inclus dans ce forfait")
-                .font(AppFont.inter(size: 10))
-                .foregroundColor(.white.opacity(0.35))
-                .padding(.horizontal, 12)
+        if let haiku = store.weeklyHaikuProgress {
+            Spacer().frame(height: 8)
+            progressRow(haiku)
         }
         Spacer().frame(height: 12)
         Divider().background(Color.white.opacity(0.08))
@@ -63,18 +60,10 @@ struct DropdownView: View {
                     .scaledToFit()
                     .frame(width: 14, height: 14)
                     .foregroundColor(Color(red: 241/255, green: 239/255, blue: 232/255))
-                Text("Limites d'utilisation")
+                Text("Claude Token Manager")
                     .font(AppFont.inter(size: 13, weight: .medium))
             }
             Spacer()
-            Text(store.selectedPlan.rawValue)
-                .font(AppFont.inter(size: 11))
-                .foregroundColor(.white.opacity(0.6))
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
-                .background(Color.white.opacity(0.08))
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-
             Button(action: { showingPreferences = true }) {
                 Image(systemName: "gearshape")
                     .font(.system(size: 11))
@@ -87,42 +76,7 @@ struct DropdownView: View {
         }
     }
 
-    // MARK: - Pickers
-
-    private var planAndProjectPickers: some View {
-        HStack(spacing: 8) {
-            planMenu
-            projectMenu
-        }
-    }
-
-    private var planMenu: some View {
-        Menu {
-            ForEach(ClaudePlan.allCases) { plan in
-                Button(action: { store.selectedPlan = plan }) {
-                    if plan == store.selectedPlan {
-                        Label(plan.rawValue, systemImage: "checkmark")
-                    } else {
-                        Text(plan.rawValue)
-                    }
-                }
-            }
-        } label: {
-            HStack(spacing: 4) {
-                Text("Forfait : \(store.selectedPlan.rawValue)")
-                    .font(AppFont.inter(size: 11))
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 8, weight: .medium))
-            }
-            .foregroundColor(.white.opacity(0.7))
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(Color.white.opacity(0.04))
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-        }
-        .menuStyle(.borderlessButton)
-        .fixedSize()
-    }
+    // MARK: - Project picker (full width)
 
     private var projectMenu: some View {
         Menu {
@@ -137,7 +91,7 @@ struct DropdownView: View {
                 Divider()
                 ForEach(store.snapshot.projects) { project in
                     Button(action: { store.selectedProjectId = project.id }) {
-                        let marker = project.isActive ? "● " : ""
+                        let marker = project.isActive ? "\u{25CF} " : ""
                         let title = "\(marker)\(project.displayName)"
                         if project.id == store.selectedProjectId {
                             Label(title, systemImage: "checkmark")
@@ -181,7 +135,7 @@ struct DropdownView: View {
 
     private var weeklyHeader: some View {
         HStack {
-            Text("Limites hebdomadaires")
+            Text("Cette semaine")
                 .font(AppFont.inter(size: 13, weight: .medium))
             Spacer()
             Text(relativeTime(store.snapshot.lastUpdate))
@@ -211,7 +165,11 @@ struct DropdownView: View {
                 Text(progress.label)
                     .font(AppFont.inter(size: 12, weight: .medium))
                 Spacer()
-                Text("\(percent) % utilisés")
+                Text("\(TokenFormatter.compact(progress.used)) / \(TokenFormatter.compact(progress.total))")
+                    .font(AppFont.inter(size: 10))
+                    .foregroundColor(.white.opacity(0.45))
+                    .monospacedDigit()
+                Text("\(percent) %")
                     .font(AppFont.inter(size: 11, weight: .medium))
                     .foregroundColor(textColor)
                     .monospacedDigit()
@@ -291,9 +249,9 @@ struct DropdownView: View {
     }
 
     private func relativeTime(_ date: Date?) -> String {
-        guard let date = date else { return "—" }
+        guard let date = date else { return "\u{2014}" }
         let seconds = Date().timeIntervalSince(date)
-        if seconds < 60 { return "à l'instant" }
+        if seconds < 60 { return "\u{00E0} l'instant" }
         if seconds < 3600 { return "il y a \(Int(seconds / 60)) min" }
         if seconds < 86400 { return "il y a \(Int(seconds / 3600))h" }
         return "il y a \(Int(seconds / 86400))j"

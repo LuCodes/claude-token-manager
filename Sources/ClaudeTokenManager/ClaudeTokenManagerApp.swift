@@ -1,8 +1,10 @@
 import SwiftUI
+import AppKit
 import ClaudeTokenManagerCore
 
 @main
 struct ClaudeTokenManagerApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var store = UsageStore()
 
     var body: some Scene {
@@ -15,6 +17,18 @@ struct ClaudeTokenManagerApp: App {
                 .environmentObject(store)
         }
         .menuBarExtraStyle(.window)
+    }
+}
+
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        let bundleID = Bundle.main.bundleIdentifier ?? ""
+        let myPID = ProcessInfo.processInfo.processIdentifier
+        let others = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
+            .filter { $0.processIdentifier != myPID }
+        for app in others {
+            app.terminate()
+        }
     }
 }
 

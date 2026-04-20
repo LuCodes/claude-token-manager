@@ -11,11 +11,6 @@ public final class UsageStore: ObservableObject {
             UserDefaults.standard.set(selectedProjectId, forKey: Self.selectedProjectKey)
         }
     }
-    @Published public var selectedPlan: ClaudePlan {
-        didSet {
-            UserDefaults.standard.set(selectedPlan.rawValue, forKey: Self.selectedPlanKey)
-        }
-    }
     @Published public var notificationsEnabled: Bool {
         didSet {
             UserDefaults.standard.set(notificationsEnabled, forKey: Self.notificationsKey)
@@ -26,27 +21,36 @@ public final class UsageStore: ObservableObject {
             }
         }
     }
+    @Published public var launchAtLoginEnabled: Bool {
+        didSet {
+            UserDefaults.standard.set(launchAtLoginEnabled, forKey: Self.launchAtLoginKey)
+        }
+    }
 
     private var refreshTask: Task<Void, Never>?
     private var fileWatcher: FileWatcher?
     private static let selectedProjectKey = "selectedProjectId"
-    private static let selectedPlanKey = "selectedPlan"
     private static let notificationsKey = "notificationsEnabled"
+    private static let launchAtLoginKey = "launchAtLoginEnabled"
 
-    // Anthropic orange
     public let accentColor = Color(red: 217/255, green: 119/255, blue: 87/255)
 
     public init() {
         self.selectedProjectId = UserDefaults.standard.string(forKey: Self.selectedProjectKey)
             ?? UsageSnapshot.allProjectsId
-        let planRaw = UserDefaults.standard.string(forKey: Self.selectedPlanKey) ?? ClaudePlan.max5.rawValue
-        self.selectedPlan = ClaudePlan(rawValue: planRaw) ?? .max5
 
         if UserDefaults.standard.object(forKey: Self.notificationsKey) == nil {
             self.notificationsEnabled = true
             UserDefaults.standard.set(true, forKey: Self.notificationsKey)
         } else {
             self.notificationsEnabled = UserDefaults.standard.bool(forKey: Self.notificationsKey)
+        }
+
+        if UserDefaults.standard.object(forKey: Self.launchAtLoginKey) == nil {
+            self.launchAtLoginEnabled = true
+            UserDefaults.standard.set(true, forKey: Self.launchAtLoginKey)
+        } else {
+            self.launchAtLoginEnabled = UserDefaults.standard.bool(forKey: Self.launchAtLoginKey)
         }
 
         refresh()
@@ -87,10 +91,11 @@ public final class UsageStore: ObservableObject {
         }()
 
         NotificationManager.shared.evaluate(progress: sessionProgress, windowEnd: snapshot.sessionEnd)
-        NotificationManager.shared.evaluate(progress: weeklyAllModelsProgress, windowEnd: weekEnd)
+        NotificationManager.shared.evaluate(progress: weeklyTotalProgress, windowEnd: weekEnd)
+        NotificationManager.shared.evaluate(progress: weeklyOpusProgress, windowEnd: weekEnd)
         NotificationManager.shared.evaluate(progress: weeklySonnetProgress, windowEnd: weekEnd)
-        if let opus = weeklyOpusProgress {
-            NotificationManager.shared.evaluate(progress: opus, windowEnd: weekEnd)
+        if let haiku = weeklyHaikuProgress {
+            NotificationManager.shared.evaluate(progress: haiku, windowEnd: weekEnd)
         }
     }
 
@@ -121,10 +126,11 @@ public final class UsageStore: ObservableObject {
     public var hottestProgress: LimitProgress {
         var all: [LimitProgress] = [
             sessionProgress,
-            weeklyAllModelsProgress,
+            weeklyTotalProgress,
+            weeklyOpusProgress,
             weeklySonnetProgress
         ]
-        if let opus = weeklyOpusProgress { all.append(opus) }
+        if let haiku = weeklyHaikuProgress { all.append(haiku) }
         return all.max(by: { $0.percent < $1.percent }) ?? sessionProgress
     }
 
@@ -140,11 +146,11 @@ public final class UsageStore: ObservableObject {
         return Color.primary
     }
 
-    // MARK: - Plan limit progress
+    // MARK: - Progress (peak-based)
 
     public var sessionProgress: LimitProgress {
         let used = snapshot.sessionTokensRaw
-        let total = selectedPlan.limits.sessionAllModels
+        let total = snapshot.effectiveSessionPeak
         return makeProgress(
             id: "session",
             label: "Session actuelle",
@@ -154,12 +160,24 @@ public final class UsageStore: ObservableObject {
         )
     }
 
-    public var weeklyAllModelsProgress: LimitProgress {
+    public var weeklyTotalProgress: LimitProgress {
         let used = snapshot.weekByModel.values.reduce(0) { $0 + $1.totalTokens }
-        let total = selectedPlan.limits.weeklyAllModels
+        let total = snapshot.effectiveWeeklyTotalPeak
         return makeProgress(
             id: "week-all",
-            label: "Tous les modèles",
+            label: "Cette semaine \u{00B7} total",
+            sublabel: weeklyResetSublabel,
+            used: used,
+            total: total
+        )
+    }
+
+    public var weeklyOpusProgress: LimitProgress {
+        let used = snapshot.weekByModel["opus"]?.totalTokens ?? 0
+        let total = snapshot.effectiveWeeklyOpusPeak
+        return makeProgress(
+            id: "week-opus",
+            label: "Dont Opus",
             sublabel: weeklyResetSublabel,
             used: used,
             total: total
@@ -168,26 +186,27 @@ public final class UsageStore: ObservableObject {
 
     public var weeklySonnetProgress: LimitProgress {
         let used = snapshot.weekByModel["sonnet"]?.totalTokens ?? 0
-        let total = selectedPlan.limits.weeklySonnetOnly
+        let total = snapshot.effectiveWeeklySonnetPeak
         return makeProgress(
             id: "week-sonnet",
-            label: "Sonnet seulement",
+            label: "Dont Sonnet",
             sublabel: weeklyResetSublabel,
             used: used,
             total: total
         )
     }
 
-    public var weeklyOpusProgress: LimitProgress? {
-        let limit = selectedPlan.limits.weeklyOpus
-        guard limit > 0 else { return nil }
-        let used = snapshot.weekByModel["opus"]?.totalTokens ?? 0
+    /// Only shown if user actually used Haiku this week.
+    public var weeklyHaikuProgress: LimitProgress? {
+        let used = snapshot.weekByModel["haiku"]?.totalTokens ?? 0
+        guard used > 0 else { return nil }
+        let total = snapshot.effectiveWeeklyHaikuPeak
         return makeProgress(
-            id: "week-opus",
-            label: "Opus",
+            id: "week-haiku",
+            label: "Dont Haiku",
             sublabel: weeklyResetSublabel,
             used: used,
-            total: limit
+            total: total
         )
     }
 
@@ -204,6 +223,7 @@ public final class UsageStore: ObservableObject {
         else if pct >= 0.70 { hue = .orange }
         else if id.contains("sonnet") { hue = .green }
         else if id.contains("opus") { hue = .orange }
+        else if id.contains("haiku") { hue = .gray }
         else { hue = .blue }
         return LimitProgress(
             id: id,
@@ -237,6 +257,22 @@ public final class UsageStore: ObservableObject {
         formatter.locale = Locale(identifier: "fr_FR")
         formatter.dateFormat = "EEE HH:mm"
         return "Réinitialisation \(formatter.string(from: end))"
+    }
+}
+
+// MARK: - Token formatting helper
+
+public enum TokenFormatter {
+    public static func compact(_ tokens: Int) -> String {
+        if tokens >= 1_000_000 {
+            let m = Double(tokens) / 1_000_000
+            return String(format: "%.1fM", m)
+        }
+        if tokens >= 1_000 {
+            let k = Double(tokens) / 1_000
+            return String(format: "%.0fk", k)
+        }
+        return "\(tokens)"
     }
 }
 

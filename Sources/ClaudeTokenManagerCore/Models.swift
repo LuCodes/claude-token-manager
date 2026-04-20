@@ -159,14 +159,45 @@ public struct UsageSnapshot {
     public var activeSessions: [SessionInfo] = []
     public var lastUpdate: Date = Date()
 
-    /// All assistant-message timestamps across all projects in the last 24h.
-    /// Used to compute the current 5-hour rolling session window.
     public var recentActivityDates: [Date] = []
 
     /// Weekly totals across all projects (Monday 09:00 -> next Monday 09:00).
     public var weekByModel: [String: ModelUsage] = [:]
 
     public static let allProjectsId = "__all__"
+
+    // MARK: - 30-day peak references
+
+    /// Max tokens in any 5h session window over the last 30 days.
+    public var sessionPeak30d: Int = 0
+    /// Max weekly total tokens (all models) over the last 30 days.
+    public var weeklyTotalPeak30d: Int = 0
+    /// Max weekly Opus tokens over the last 30 days.
+    public var weeklyOpusPeak30d: Int = 0
+    /// Max weekly Sonnet tokens over the last 30 days.
+    public var weeklySonnetPeak30d: Int = 0
+    /// Max weekly Haiku tokens over the last 30 days.
+    public var weeklyHaikuPeak30d: Int = 0
+
+    // Fallback minimums for new users
+    public static let sessionPeakFallback = 1_000_000
+    public static let weeklyPeakFallback = 10_000_000
+
+    public var effectiveSessionPeak: Int {
+        sessionPeak30d > 0 ? sessionPeak30d : Self.sessionPeakFallback
+    }
+    public var effectiveWeeklyTotalPeak: Int {
+        weeklyTotalPeak30d > 0 ? weeklyTotalPeak30d : Self.weeklyPeakFallback
+    }
+    public var effectiveWeeklyOpusPeak: Int {
+        weeklyOpusPeak30d > 0 ? weeklyOpusPeak30d : Self.weeklyPeakFallback
+    }
+    public var effectiveWeeklySonnetPeak: Int {
+        weeklySonnetPeak30d > 0 ? weeklySonnetPeak30d : Self.weeklyPeakFallback
+    }
+    public var effectiveWeeklyHaikuPeak: Int {
+        weeklyHaikuPeak30d > 0 ? weeklyHaikuPeak30d : Self.weeklyPeakFallback
+    }
 
     public var todayByModel: [String: ModelUsage] {
         var out: [String: ModelUsage] = [:]
@@ -204,17 +235,14 @@ public struct UsageSnapshot {
         projects.reduce(0) { $0 + $1.messagesToday }
     }
 
-    /// Tokens used across all models in the current 5h rolling session.
     public var sessionTokens: Int {
         sessionTokensRaw
     }
 
-    /// Set by LogScanner.scan() so the UI doesn't need to redo the math.
     public var sessionTokensRaw: Int = 0
     public var sessionStart: Date?
     public var sessionEnd: Date?
 
-    /// Returns a view scoped to a single project id, or the global aggregate.
     public func scoped(to projectId: String) -> ProjectUsage {
         if projectId == Self.allProjectsId {
             return ProjectUsage(
@@ -245,11 +273,85 @@ public struct UsageSnapshot {
 }
 
 public enum ProjectNameDecoder {
-    /// Claude Code encodes project paths by replacing `/` with `-`.
-    /// Example: "-Users-lucas-dev-cooksy" → "cooksy"
     public static func humanReadable(from encoded: String) -> String {
         let trimmed = encoded.hasPrefix("-") ? String(encoded.dropFirst()) : encoded
         let parts = trimmed.split(separator: "-").map(String.init)
         return parts.last ?? encoded
+    }
+}
+
+// MARK: - Window computation
+
+public enum LimitWindow {
+    case session(start: Date, end: Date)
+    case week(start: Date, end: Date)
+}
+
+public enum LimitCalculator {
+
+    public static func currentSessionWindow(activityDates: [Date], now: Date = Date()) -> LimitWindow? {
+        let fiveHours: TimeInterval = 5 * 3600
+        let recent = activityDates.filter { now.timeIntervalSince($0) < fiveHours }
+        guard let earliest = recent.min() else { return nil }
+        let end = earliest.addingTimeInterval(fiveHours)
+        return .session(start: earliest, end: end)
+    }
+
+    public static func currentWeekWindow(now: Date = Date(), calendar: Calendar = .current) -> LimitWindow {
+        var cal = calendar
+        cal.firstWeekday = 2
+
+        let today = cal.startOfDay(for: now)
+        let weekday = cal.component(.weekday, from: today)
+        let daysFromMonday = (weekday + 5) % 7
+        let mondayMidnight = cal.date(byAdding: .day, value: -daysFromMonday, to: today) ?? today
+        let mondayMorning = cal.date(bySettingHour: 9, minute: 0, second: 0, of: mondayMidnight) ?? mondayMidnight
+
+        let start: Date
+        if now < mondayMorning {
+            start = cal.date(byAdding: .day, value: -7, to: mondayMorning) ?? mondayMorning
+        } else {
+            start = mondayMorning
+        }
+        let end = cal.date(byAdding: .day, value: 7, to: start) ?? start
+        return .week(start: start, end: end)
+    }
+}
+
+// MARK: - Usage vs limit
+
+public struct LimitProgress: Identifiable {
+    public let id: String
+    public let label: String
+    public let sublabel: String
+    public let percent: Double
+    public let used: Int
+    public let total: Int
+    public let accentHue: Hue
+
+    public enum Hue {
+        case blue, green, orange, gray
+
+        public var hex: String {
+            switch self {
+            case .blue:   return "#378ADD"
+            case .green:  return "#1D9E75"
+            case .orange: return "#D97757"
+            case .gray:   return "#888780"
+            }
+        }
+    }
+
+    public var isHot: Bool { percent >= 0.70 }
+    public var clampedPercent: Double { max(0, min(1, percent)) }
+
+    public init(id: String, label: String, sublabel: String, percent: Double, used: Int, total: Int, accentHue: Hue) {
+        self.id = id
+        self.label = label
+        self.sublabel = sublabel
+        self.percent = percent
+        self.used = used
+        self.total = total
+        self.accentHue = accentHue
     }
 }
