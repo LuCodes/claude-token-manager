@@ -2,7 +2,7 @@ import Foundation
 import UserNotifications
 import AppKit
 
-/// Schedules discreet macOS banner notifications when a usage bar crosses a threshold.
+/// Sends budget threshold notifications (80% and 95% of daily budget).
 public final class NotificationManager {
 
     public static let shared = NotificationManager()
@@ -33,31 +33,34 @@ public final class NotificationManager {
         }
     }
 
-    // MARK: - Public API
-
     public func requestAuthorizationIfNeeded() async -> Bool {
         do {
-            let granted = try await center.requestAuthorization(options: [.alert])
-            return granted
+            return try await center.requestAuthorization(options: [.alert])
         } catch {
             return false
         }
     }
 
-    public func evaluate(progress: LimitProgress, windowEnd: Date?) {
-        guard let windowEnd = windowEnd else { return }
-        let percent = Int((progress.clampedPercent * 100).rounded(.down))
+    /// Evaluate daily budget and fire notifications at 80% and 95%.
+    public func evaluate(currentValue: Double, budget: Double?, isMoney: Bool) {
+        guard let budget = budget, budget > 0 else { return }
+        let percent = Int((currentValue / budget * 100).rounded(.down))
+        let today = Calendar.current.startOfDay(for: Date())
 
         for threshold in Threshold.allCases where percent >= threshold.rawValue {
-            let key = dedupKey(for: progress.id, threshold: threshold, windowEnd: windowEnd)
+            let key = "budget-\(threshold.rawValue)-\(Int(today.timeIntervalSince1970))"
             if firedAlerts[key] != nil { continue }
 
-            fireNotification(progress: progress, threshold: threshold)
+            fireNotification(
+                currentValue: currentValue,
+                budget: budget,
+                isMoney: isMoney,
+                threshold: threshold
+            )
             var updated = firedAlerts
             updated[key] = Date()
             firedAlerts = updated
         }
-
         pruneOldEntries()
     }
 
@@ -65,12 +68,19 @@ public final class NotificationManager {
         UserDefaults.standard.removeObject(forKey: dedupKey)
     }
 
-    // MARK: - Private
-
-    private func fireNotification(progress: LimitProgress, threshold: Threshold) {
+    private func fireNotification(currentValue: Double, budget: Double, isMoney: Bool, threshold: Threshold) {
         let content = UNMutableNotificationContent()
-        content.title = "\(progress.label) à \(threshold.label)"
-        content.body = progress.sublabel
+        content.title = "Budget quotidien \u{00E0} \(threshold.label)"
+
+        if isMoney {
+            let remaining = max(0, budget - currentValue)
+            content.body = "\(CostFormatter.format(currentValue)) sur \(CostFormatter.format(budget)) \u{00B7} il reste \(CostFormatter.format(remaining))"
+        } else {
+            let used = TokenFormatter.compact(Int(currentValue))
+            let total = TokenFormatter.compact(Int(budget))
+            let remaining = TokenFormatter.compact(max(0, Int(budget - currentValue)))
+            content.body = "\(used) sur \(total) tokens \u{00B7} il reste \(remaining)"
+        }
         content.sound = nil
 
         let request = UNNotificationRequest(
@@ -81,13 +91,8 @@ public final class NotificationManager {
         center.add(request) { _ in }
     }
 
-    private func dedupKey(for limitId: String, threshold: Threshold, windowEnd: Date) -> String {
-        let epoch = Int(windowEnd.timeIntervalSince1970)
-        return "\(limitId)|\(threshold.rawValue)|\(epoch)"
-    }
-
     private func pruneOldEntries() {
-        let cutoff = Date().addingTimeInterval(-30 * 24 * 3600)
+        let cutoff = Date().addingTimeInterval(-7 * 24 * 3600)
         var current = firedAlerts
         current = current.filter { $0.value > cutoff }
         firedAlerts = current

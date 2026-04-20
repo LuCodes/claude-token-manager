@@ -26,9 +26,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let myPID = ProcessInfo.processInfo.processIdentifier
         let others = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
             .filter { $0.processIdentifier != myPID }
-        for app in others {
-            app.terminate()
-        }
+        for app in others { app.terminate() }
     }
 }
 

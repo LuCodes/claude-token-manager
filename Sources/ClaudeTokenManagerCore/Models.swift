@@ -76,13 +76,13 @@ public struct ModelUsage: Identifiable, Hashable {
     }
 }
 
-struct Pricing {
-    let input: Double
-    let output: Double
-    let cacheWrite: Double
-    let cacheRead: Double
+public struct Pricing {
+    public let input: Double
+    public let output: Double
+    public let cacheWrite: Double
+    public let cacheRead: Double
 
-    static func forModel(_ model: String) -> Pricing {
+    public static func forModel(_ model: String) -> Pricing {
         let lower = model.lowercased()
         if lower.contains("opus") {
             return Pricing(input: 15.0, output: 75.0, cacheWrite: 18.75, cacheRead: 1.50)
@@ -166,39 +166,6 @@ public struct UsageSnapshot {
 
     public static let allProjectsId = "__all__"
 
-    // MARK: - 30-day peak references
-
-    /// Max tokens in any 5h session window over the last 30 days.
-    public var sessionPeak30d: Int = 0
-    /// Max weekly total tokens (all models) over the last 30 days.
-    public var weeklyTotalPeak30d: Int = 0
-    /// Max weekly Opus tokens over the last 30 days.
-    public var weeklyOpusPeak30d: Int = 0
-    /// Max weekly Sonnet tokens over the last 30 days.
-    public var weeklySonnetPeak30d: Int = 0
-    /// Max weekly Haiku tokens over the last 30 days.
-    public var weeklyHaikuPeak30d: Int = 0
-
-    // Fallback minimums for new users
-    public static let sessionPeakFallback = 1_000_000
-    public static let weeklyPeakFallback = 10_000_000
-
-    public var effectiveSessionPeak: Int {
-        sessionPeak30d > 0 ? sessionPeak30d : Self.sessionPeakFallback
-    }
-    public var effectiveWeeklyTotalPeak: Int {
-        weeklyTotalPeak30d > 0 ? weeklyTotalPeak30d : Self.weeklyPeakFallback
-    }
-    public var effectiveWeeklyOpusPeak: Int {
-        weeklyOpusPeak30d > 0 ? weeklyOpusPeak30d : Self.weeklyPeakFallback
-    }
-    public var effectiveWeeklySonnetPeak: Int {
-        weeklySonnetPeak30d > 0 ? weeklySonnetPeak30d : Self.weeklyPeakFallback
-    }
-    public var effectiveWeeklyHaikuPeak: Int {
-        weeklyHaikuPeak30d > 0 ? weeklyHaikuPeak30d : Self.weeklyPeakFallback
-    }
-
     public var todayByModel: [String: ModelUsage] {
         var out: [String: ModelUsage] = [:]
         for project in projects {
@@ -225,6 +192,12 @@ public struct UsageSnapshot {
     public var todayTotalCost: Double {
         todayByModel.values.reduce(0) { $0 + $1.estimatedCost }
     }
+    public var weekTotalTokens: Int {
+        weekByModel.values.reduce(0) { $0 + $1.totalTokens }
+    }
+    public var weekTotalCost: Double {
+        weekByModel.values.reduce(0) { $0 + $1.estimatedCost }
+    }
     public var monthTotalCost: Double {
         monthByModel.values.reduce(0) { $0 + $1.estimatedCost }
     }
@@ -235,11 +208,9 @@ public struct UsageSnapshot {
         projects.reduce(0) { $0 + $1.messagesToday }
     }
 
-    public var sessionTokens: Int {
-        sessionTokensRaw
-    }
-
+    public var sessionTokens: Int { sessionTokensRaw }
     public var sessionTokensRaw: Int = 0
+    public var sessionCost: Double = 0
     public var sessionStart: Date?
     public var sessionEnd: Date?
 
@@ -257,6 +228,13 @@ public struct UsageSnapshot {
         }
         return projects.first { $0.id == projectId }
             ?? ProjectUsage(id: projectId, displayName: projectId)
+    }
+
+    /// Top project by cost today.
+    public var topProjectToday: (name: String, cost: Double)? {
+        guard let top = projects.max(by: { $0.todayTotalCost < $1.todayTotalCost }),
+              top.todayTotalCost > 0 else { return nil }
+        return (top.displayName, top.todayTotalCost)
     }
 
     public init() {}
@@ -318,40 +296,46 @@ public enum LimitCalculator {
     }
 }
 
-// MARK: - Usage vs limit
+// MARK: - Display format
 
-public struct LimitProgress: Identifiable {
-    public let id: String
-    public let label: String
-    public let sublabel: String
-    public let percent: Double
-    public let used: Int
-    public let total: Int
-    public let accentHue: Hue
+public enum DisplayFormat: String, CaseIterable {
+    case cost = "cost"
+    case tokens = "tokens"
 
-    public enum Hue {
-        case blue, green, orange, gray
-
-        public var hex: String {
-            switch self {
-            case .blue:   return "#378ADD"
-            case .green:  return "#1D9E75"
-            case .orange: return "#D97757"
-            case .gray:   return "#888780"
-            }
+    public var label: String {
+        switch self {
+        case .cost: return "Co\u{00FB}t \u{00E9}quivalent API"
+        case .tokens: return "Tokens"
         }
     }
+}
 
-    public var isHot: Bool { percent >= 0.70 }
-    public var clampedPercent: Double { max(0, min(1, percent)) }
+// MARK: - Formatters
 
-    public init(id: String, label: String, sublabel: String, percent: Double, used: Int, total: Int, accentHue: Hue) {
-        self.id = id
-        self.label = label
-        self.sublabel = sublabel
-        self.percent = percent
-        self.used = used
-        self.total = total
-        self.accentHue = accentHue
+public enum CostFormatter {
+    private static let fmt: NumberFormatter = {
+        let f = NumberFormatter()
+        f.numberStyle = .currency
+        f.currencyCode = "USD"
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.maximumFractionDigits = 2
+        f.minimumFractionDigits = 2
+        return f
+    }()
+
+    public static func format(_ value: Double) -> String {
+        fmt.string(from: NSNumber(value: value)) ?? "$0.00"
+    }
+}
+
+public enum TokenFormatter {
+    public static func compact(_ count: Int) -> String {
+        if count >= 1_000_000 {
+            return String(format: "%.1fM", Double(count) / 1_000_000)
+        }
+        if count >= 1_000 {
+            return String(format: "%.1fk", Double(count) / 1_000)
+        }
+        return "\(count)"
     }
 }
