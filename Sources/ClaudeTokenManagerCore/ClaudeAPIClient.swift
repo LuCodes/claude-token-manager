@@ -157,10 +157,12 @@ public struct RawUsageReport: Codable, Sendable {
 
 final class PinnedURLSessionDelegate: NSObject, URLSessionDelegate {
     /// SHA-256 hashes of the public keys we trust for claude.ai.
-    /// IMPORTANT: populate with output of scripts/extract-spki-hash.sh before release.
+    /// Extracted 2026-04-20 via scripts/extract-spki-hash.sh.
+    /// Source: Let's Encrypt E8 chain.
     /// When empty, falls back to system trust (pinning disabled).
     private let pinnedSPKIHashes: Set<String> = [
-        // TODO: Lucas must run scripts/extract-spki-hash.sh and paste hashes here
+        "6bbYmCUydTiUdHfXo26WKlDxCgYO032WlolDxthhXoM=", // Leaf (claude.ai)
+        "iFvwVyJSxnQdyaUvUERIf+8qk7gRze3612JMwoO3zdU=", // Intermediate (Let's Encrypt E8)
     ]
 
     private let hostToPin = "claude.ai"
