@@ -30,6 +30,31 @@ struct DropdownView: View {
     @ViewBuilder
     private var mainContent: some View {
         header
+        if store.claudeAIModeEnabled && store.claudeAIConnectionStatus == .connected {
+            Spacer().frame(height: 6)
+            HStack(spacing: 4) {
+                Circle()
+                    .fill(Color(red: 29/255, green: 158/255, blue: 117/255))
+                    .frame(width: 6, height: 6)
+                Text("Chiffres r\u{00E9}els claude.ai")
+                    .font(AppFont.inter(size: 10))
+                    .foregroundColor(.white.opacity(0.6))
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(Color(red: 29/255, green: 158/255, blue: 117/255).opacity(0.1))
+            .cornerRadius(6)
+        } else if store.claudeAIModeEnabled && store.claudeAIConnectionStatus == .expired {
+            Spacer().frame(height: 6)
+            HStack(spacing: 4) {
+                Circle()
+                    .fill(Color(red: 216/255, green: 90/255, blue: 48/255))
+                    .frame(width: 6, height: 6)
+                Text("Session claude.ai expir\u{00E9}e")
+                    .font(AppFont.inter(size: 10))
+                    .foregroundColor(Color(red: 216/255, green: 90/255, blue: 48/255))
+            }
+        }
         Spacer().frame(height: 12)
         projectMenu
         Spacer().frame(height: 14)
