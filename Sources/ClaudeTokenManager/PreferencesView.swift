@@ -55,13 +55,13 @@ struct PreferencesView: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Format d'affichage")
                 .font(AppFont.inter(size: 12, weight: .medium))
-            Picker("", selection: $store.displayFormat) {
-                ForEach(DisplayFormat.allCases, id: \.self) { fmt in
-                    Text(fmt.label).tag(fmt)
-                }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
+            SegmentedToggle(
+                options: [
+                    (value: DisplayFormat.cost, label: "Co\u{00FB}t API"),
+                    (value: DisplayFormat.tokens, label: "Tokens")
+                ],
+                selection: $store.displayFormat
+            )
             Text("Affiche les co\u{00FB}ts ou les tokens bruts partout dans l'app")
                 .font(AppFont.inter(size: 10))
                 .foregroundColor(.white.opacity(0.4))
@@ -99,10 +99,13 @@ struct PreferencesView: View {
                         }
                 }
             }
-            HStack(spacing: 12) {
-                budgetTypeButton(label: "$", isMoney: true)
-                budgetTypeButton(label: "tokens", isMoney: false)
-            }
+            SegmentedToggle(
+                options: [
+                    (value: true, label: "$"),
+                    (value: false, label: "tokens")
+                ],
+                selection: $store.dailyBudgetIsMoney
+            )
             Text("Te pr\u{00E9}viens \u{00E0} 80 % et 95 % de ton budget. Laisser vide pour d\u{00E9}sactiver.")
                 .font(AppFont.inter(size: 10))
                 .foregroundColor(.white.opacity(0.4))
@@ -111,20 +114,6 @@ struct PreferencesView: View {
         .padding(.horizontal, 12).padding(.vertical, 10)
         .background(Color.white.opacity(0.04))
         .clipShape(RoundedRectangle(cornerRadius: 10))
-    }
-
-    private func budgetTypeButton(label: String, isMoney: Bool) -> some View {
-        Button(action: { store.dailyBudgetIsMoney = isMoney }) {
-            HStack(spacing: 4) {
-                Circle()
-                    .fill(store.dailyBudgetIsMoney == isMoney ? tintBlue : Color.white.opacity(0.15))
-                    .frame(width: 8, height: 8)
-                Text(label)
-                    .font(AppFont.inter(size: 11))
-                    .foregroundColor(store.dailyBudgetIsMoney == isMoney ? .white : .white.opacity(0.5))
-            }
-        }
-        .buttonStyle(.plain)
     }
 
     // MARK: - Launch at login
@@ -201,7 +190,7 @@ struct PreferencesView: View {
                     .foregroundColor(tintBlue)
             }
             Spacer()
-            Text("v0.2.0")
+            Text("v0.2.1")
                 .font(AppFont.inter(size: 10))
                 .foregroundColor(.white.opacity(0.3))
         }
