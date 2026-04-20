@@ -18,9 +18,6 @@ public final class UsageStore: ObservableObject {
             }
         }
     }
-    @Published public var dailyBudgetIsMoney: Bool {
-        didSet { UserDefaults.standard.set(dailyBudgetIsMoney, forKey: "dailyBudgetIsMoney") }
-    }
     @Published public var launchAtLoginEnabled: Bool {
         didSet { UserDefaults.standard.set(launchAtLoginEnabled, forKey: "launchAtLoginEnabled") }
     }
@@ -65,10 +62,6 @@ public final class UsageStore: ObservableObject {
         } else {
             self.dailyBudgetValue = nil
         }
-        self.dailyBudgetIsMoney = UserDefaults.standard.object(forKey: "dailyBudgetIsMoney") == nil
-            ? true
-            : UserDefaults.standard.bool(forKey: "dailyBudgetIsMoney")
-
         if UserDefaults.standard.object(forKey: "launchAtLoginEnabled") == nil {
             self.launchAtLoginEnabled = true
             UserDefaults.standard.set(true, forKey: "launchAtLoginEnabled")
@@ -78,6 +71,7 @@ public final class UsageStore: ObservableObject {
 
         self.claudeAIModeEnabled = UserDefaults.standard.bool(forKey: "claudeAIModeEnabled")
 
+        migrateLegacyBudgetIfNeeded()
         refreshDataSources()
         pruneStaleCredentialsIfNeeded()
         refresh()
@@ -229,15 +223,25 @@ public final class UsageStore: ObservableObject {
 
     private func evaluateBudgetNotifications() {
         guard let budget = dailyBudgetValue, budget > 0 else { return }
-        let currentValue: Double
-        if dailyBudgetIsMoney {
-            currentValue = snapshot.todayTotalCost
-        } else {
-            currentValue = Double(snapshot.todayTotalTokens)
-        }
         NotificationManager.shared.evaluate(
-            currentValue: currentValue, budget: budget, isMoney: dailyBudgetIsMoney
+            currentValue: snapshot.todayTotalCost, budget: budget, isMoney: true
         )
+    }
+
+    private func migrateLegacyBudgetIfNeeded() {
+        let defaults = UserDefaults.standard
+        let migrationKey = "budget.migratedToV141"
+        if defaults.bool(forKey: migrationKey) { return }
+
+        // Migrate old key if it exists
+        if defaults.object(forKey: "dailyBudgetValue") != nil {
+            let old = defaults.double(forKey: "dailyBudgetValue")
+            if old > 0 { defaults.set(old, forKey: "dailyBudgetValue") }
+        }
+
+        // Clean up deprecated keys
+        defaults.removeObject(forKey: "dailyBudgetIsMoney")
+        defaults.set(true, forKey: migrationKey)
     }
 
     private func startPeriodicRefresh() {
@@ -272,10 +276,7 @@ public final class UsageStore: ObservableObject {
 
     public var menuBarTint: Color {
         guard let budget = dailyBudgetValue, budget > 0 else { return Color.primary }
-        let current: Double = dailyBudgetIsMoney
-            ? snapshot.todayTotalCost
-            : Double(snapshot.todayTotalTokens)
-        let pct = current / budget
+        let pct = snapshot.todayTotalCost / budget
         if pct >= 0.95 { return Color(red: 216/255, green: 90/255, blue: 48/255) }
         if pct >= 0.80 { return Color(red: 239/255, green: 159/255, blue: 39/255) }
         return Color.primary
