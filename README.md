@@ -1,133 +1,226 @@
-# Claude Token Manager
+<p align="center">
+  <img src="Sources/ClaudeTokenManager/Resources/Assets.xcassets/AppIcon.appiconset/icon_128x128.png" alt="Claude Token Manager" width="96" />
+</p>
 
-A native macOS menu bar app that tracks your Claude Code token usage and API-equivalent costs — powered entirely by local logs.
+<h1 align="center">Claude Token Manager</h1>
 
-## What it shows
+<p align="center">
+  Real-time Claude usage in your macOS menu bar.<br/>
+  Local Claude Code activity and live claude.ai plan limits, at a glance.
+</p>
 
-- **Menu bar icon** (Claude burst) + today's API-equivalent cost (e.g. `$12.40`) or token count. Color shifts to amber/coral when approaching your daily budget.
-- **Today's usage** with cost and token breakdown.
-- **Model breakdown**: Opus / Sonnet / Haiku cards showing cost and tokens per model.
-- **Current 5 h rolling session** with reset countdown.
-- **Weekly total** with reset time.
-- **Top project** of the day.
-- **Project picker**: view usage across all projects or filter to one specific Claude Code project.
-- **Daily budget** with threshold notifications at 80 % and 95 %. Set in $ or tokens.
-- **Display format toggle**: switch between cost and tokens everywhere in the app.
+<p align="center">
+  <img src="https://img.shields.io/badge/macOS-13%2B-black?style=flat-square" alt="macOS 13+" />
+  <img src="https://img.shields.io/badge/Swift-5.9-F05138?style=flat-square" alt="Swift 5.9" />
+  <img src="https://img.shields.io/github/v/release/LuCodes/claude-token-manager?style=flat-square" alt="Latest release" />
+  <img src="https://img.shields.io/github/license/LuCodes/claude-token-manager?style=flat-square" alt="MIT License" />
+</p>
 
-## Important note
+<p align="center">
+  <img src="docs/screenshots/dropdown-claude-ai.png" alt="Claude Token Manager dropdown showing claude.ai sync mode" width="380" />
+</p>
 
-This app measures your Claude Code usage from local logs and calculates costs at Anthropic API rates. **If you're on a Pro or Max subscription, your actual cost is the fixed price of your plan** — the dollar amounts shown are what you *would* pay at API rates. To see your real plan limits, use the "Open claude.ai" link in Preferences.
-
-## Installation
-
-### Via Homebrew (recommended)
+## Install
 
 ```bash
 brew tap LuCodes/claude-token-manager
 brew install --cask claude-token-manager
 ```
 
-The cask automatically removes the macOS quarantine attribute after install — you can launch the app directly from Launchpad without any Gatekeeper popup.
+The cask removes the macOS quarantine attribute automatically, so the
+app launches directly without the Gatekeeper prompt.
 
-### Manual install
+Alternatively, download the latest `.zip` from the
+[releases page](https://github.com/LuCodes/claude-token-manager/releases/latest),
+unzip, and drop the app in `/Applications`.
 
-Download `ClaudeTokenManager.zip` from the [Releases page](https://github.com/LuCodes/claude-token-manager/releases/latest), unzip, and move `Claude Token Manager.app` to `/Applications`.
+## Features
 
-On first launch, macOS will show a popup saying it "can't verify the app is free from malware" because the app is ad-hoc signed (free) rather than with a paid Apple Developer certificate. To launch anyway:
+- **Local mode** — Track Claude Code usage from your local JSONL logs.
+  Tokens, per-model breakdown (Opus, Sonnet, Haiku), and
+  API-equivalent cost using Anthropic's public pricing.
+- **claude.ai sync** — Show real plan limits from your claude.ai
+  account: current 5-hour session, weekly pools for Sonnet, Opus,
+  Claude Design, and any other pool active on your plan. Matches
+  claude.ai/settings/usage exactly.
+- **Smart alerts** — macOS notifications when any pool reaches 80 %
+  or 95 %. Deduplicated per reset window, so you never get spammed.
+- **Daily budget** — Minimalist slider to set a cost cap (in USD),
+  with 80 % and 95 % notifications.
+- **Native and lightweight** — Pure SwiftUI, runs in the menu bar,
+  no dock icon, no background services. Under 5 MB, zero
+  third-party dependencies.
 
-- **Option A** — Right-click the app in `/Applications` > **Open**. A new popup appears with an "Open" button next to "Cancel".
-- **Option B** — Via terminal:
-  ```bash
-  xattr -cr "/Applications/Claude Token Manager.app"
-  open "/Applications/Claude Token Manager.app"
-  ```
+## Usage
 
-macOS won't ask again for this version.
+### Local mode
 
-### Why no Apple Developer signature?
+<p align="center">
+  <img src="docs/screenshots/dropdown-local.png" alt="Dropdown in local mode showing Claude Code usage" width="380" />
+</p>
 
-An Apple Developer certificate costs $99/year. For a solo open-source project, that's not justified today. The code is public and auditable on this repo — if you want to verify it contains nothing malicious before launching, you can build it yourself with `./build.sh`.
+Local mode works out of the box if you use Claude Code. The app reads
+JSONL logs from `~/.claude/projects/` via FSEvents and aggregates
+usage across all projects. You can filter by project from the
+dropdown.
 
-### Update
+API-equivalent cost is calculated using Anthropic's public pricing
+for input tokens, output tokens, cache reads and cache writes. So you
+can compare what your Claude Code activity would cost on the direct
+API. If you're on a Pro or Max subscription, this number is purely
+informational — your real cost is your fixed monthly price.
 
-```bash
-brew upgrade --cask claude-token-manager
-```
+### claude.ai sync mode
+
+<p align="center">
+  <img src="docs/screenshots/preferences.png" alt="Preferences with claude.ai sync and daily budget" width="380" />
+</p>
+
+To see real plan limits instead of local estimates, enable sync in
+Preferences. You'll need two values from claude.ai:
+
+1. Open [claude.ai/settings/usage](https://claude.ai/settings/usage)
+   in Chrome, Brave, or Arc
+2. Open DevTools with `Cmd + Option + I`
+3. Go to the **Network** tab and reload the page
+4. Find the request named `usage`
+5. **Organization ID** — look at the Request URL:
+   `https://claude.ai/api/organizations/YOUR_ORG_ID/usage`
+6. **Session cookie** — go to the **Application** tab →
+   **Cookies** → `https://claude.ai` → find `sessionKey` and copy
+   its value (starts with `sk-ant-sid01-...`)
+
+Paste both values in Preferences and click **Test & save**. If the
+request succeeds, the dropdown switches to the claude.ai layout and
+shows your actual percentages — matching what you see at
+claude.ai/settings/usage.
+
+Credentials are stored in macOS Keychain with the
+`kSecAttrAccessibleWhenUnlockedThisDeviceOnly` attribute. They never
+leave your Mac, are never synced to iCloud, and are never included
+in Time Machine backups.
+
+See [docs/CLAUDE_AI_SYNC.md](./docs/CLAUDE_AI_SYNC.md) for the full
+setup guide with extended troubleshooting.
 
 ## Security and trust
 
-Claude Token Manager is a solo open-source project. Here's what is and isn't done:
+This is an open-source solo project. Here's exactly what is done and
+what is not.
 
-**What is done**:
-- Code 100% open-source and auditable
-- Zero third-party dependencies (Apple frameworks only)
-- claude.ai credentials (if you enable sync) stored in macOS Keychain with `ThisDeviceOnly`
-- Certificate pinning on `claude.ai` to prevent MITM attacks
-- No data sent anywhere other than claude.ai
-- Auto-deletion of credentials after 30 days of inactivity
+**What's done**
 
-**What is not done**:
-- No Apple Developer ID signature ($99/year cost)
+- 100 % open source, all code in this repo
+- Zero third-party dependencies — only Apple frameworks (SwiftUI,
+  AppKit, Foundation, Security, UserNotifications)
+- Credentials stored in macOS Keychain, `ThisDeviceOnly` attribute
+  (excluded from iCloud and Time Machine backups)
+- Custom `SessionKey` type that cannot be logged or printed by
+  design (its `description` always returns `"SessionKey(REDACTED)"`)
+- Certificate pinning for `claude.ai` using SPKI SHA-256 hashes
+  from the Let's Encrypt E8 intermediate CA
+- Auto-logout: credentials are cleared if the app hasn't been opened
+  for 30 days
+- Clipboard is cleared after pasting the session cookie
+
+**What's not done**
+
+- No Apple Developer ID signature (would cost $99/year for a solo
+  project and is not yet justified)
 - No Apple notarization
-- The Homebrew cask automatically removes macOS quarantine — this is a UX choice that bypasses Gatekeeper. Prefer to keep control? Install manually from the releases page.
+- The Homebrew cask removes the macOS quarantine attribute
+  automatically to improve UX. If you prefer Gatekeeper to verify
+  every download, install manually from the releases page instead.
 
-If you have doubts, build the app from source with `./build.sh` and review the code yourself.
+> [!WARNING]
+> The `claude.ai/api/organizations/*/usage` endpoint used for sync is
+> **undocumented** and could change or be blocked by Anthropic at any
+> time. Use the sync feature at your own risk. Local mode does not
+> depend on this endpoint and will always keep working.
+
+If you have any doubt about trust, audit the code or build from
+source yourself with `./build.sh`.
 
 ## Build from source
 
+Requirements:
+- macOS 13 or later
+- Xcode 15 or later (includes Swift 5.9)
+
 ```bash
-git clone https://github.com/LuCodes/claude-token-manager
+git clone https://github.com/LuCodes/claude-token-manager.git
 cd claude-token-manager
 ./build.sh release
-mv "build/Claude Token Manager.app" /Applications/
-open "/Applications/Claude Token Manager.app"
 ```
 
-Requires macOS 13+ and Xcode Command Line Tools (Swift 5.9+).
+The built app appears in `build/Claude Token Manager.app`. Move it to
+`/Applications` to install.
 
-## Start at login
+Run tests:
 
-Enabled by default. Toggle in Preferences (gear icon) → "Lancer au démarrage".
+```bash
+swift test
+```
 
 ## How it works
 
-Claude Code writes a JSONL transcript for every session to `~/.claude/projects/<project-hash>/<session-id>.jsonl`. Each assistant message includes precise token usage (input, output, cache creation, cache read) plus the model name. This app parses those logs, computes API-equivalent costs using Anthropic's published pricing, aggregates by project and time window, and watches the directory via `FSEvents` so the dropdown updates in real time.
+**Local mode** uses FSEvents to watch `~/.claude/projects/`. When
+Claude Code writes new JSONL entries, the app re-scans the relevant
+files, parses the events, and updates token counts and cost
+estimates. Pricing per model is stored in `Pricing.swift` and reflects
+Anthropic's published rates.
 
-Works on all Claude Code setups — API, Pro, and Max. The logs exist regardless of subscription type.
+**claude.ai sync mode** periodically fetches
+`https://claude.ai/api/organizations/{orgId}/usage` using the session
+cookie you provided. The response contains utilization percentages
+for each pool (session, weekly all-models, Sonnet, Opus, Claude
+Design, and others). These are rendered as progress bars matching the
+claude.ai settings page layout.
 
-## Typography
+TLS traffic is validated with pinned public key hashes extracted at
+build time from the current certificate chain. The app pins the
+Let's Encrypt E8 intermediate CA hash (stable) in addition to the
+leaf hash (rotates every ~90 days). If the leaf rotates while the
+intermediate remains, the app keeps working; if both rotate
+simultaneously, it falls back to standard system trust.
 
-Uses Inter when installed on your system, with a clean fallback to SF Pro. Install Inter from [rsms.me/inter](https://rsms.me/inter/) for the intended look.
+The SPKI extraction is done with a custom ASN.1 DER parser written
+in Swift — no third-party crypto libraries, no hardcoded algorithm
+headers, and the pinning survives any future migration between RSA
+and EC keys.
 
-## Project layout
+## Roadmap
 
-```
-Sources/
-  ClaudeTokenManagerCore/           ← logic layer, no UI
-    Models.swift                ← UsageSnapshot, ProjectUsage, ModelUsage, pricing, formatters
-    LogScanner.swift            ← JSONL parsing and aggregation
-    NotificationManager.swift   ← daily budget notifications with dedup
-    UsageStore.swift            ← ObservableObject, FSEvents watcher
-  ClaudeTokenManager/               ← SwiftUI layer
-    ClaudeTokenManagerApp.swift     ← @main, MenuBarExtra, single-instance guard
-    DropdownView.swift          ← main dropdown with model breakdown cards
-    PreferencesView.swift       ← settings: format, budget, login, info
-    LoginItem.swift             ← SMAppService wrapper
-    AppFont.swift               ← Inter/SF Pro helper
-    Resources/
-      Assets.xcassets/
-        MenuBarIcon.imageset/   ← vector PDF, template-rendered
-```
+- [ ] Historical chart (7 / 30 day view) of usage trends
+- [ ] CSV / JSON export of usage data
+- [ ] Support for multiple claude.ai accounts
+- [ ] Per-project budget notifications
+- [ ] Menu bar compact mode (percentage only, no icon)
 
-## Distribution
+If you have ideas, open an issue or start a discussion.
 
-To ship signed and notarized so users don't need to right-click → Open:
+## Contributing
 
-1. Apple Developer account ($99/year)
-2. `codesign --force --deep --sign "Developer ID Application: ..." "build/Claude Token Manager.app"`
-3. `xcrun notarytool submit ... --wait` then `xcrun stapler staple ...`
-4. Optional: publish a Homebrew cask
+Contributions are welcome. Before starting significant work, please:
+
+- Open an issue to align on scope
+- Keep commits atomic and use [conventional commit](https://www.conventionalcommits.org/) format
+- Add tests when modifying `ClaudeTokenManagerCore`
+- Update documentation when user-facing behavior changes
+
+For bug reports, include your macOS version, the app version (shown
+in the Preferences footer), and relevant output from `Console.app`
+filtered by `Claude Token Manager`.
+
+## Acknowledgments
+
+- [Anthropic](https://anthropic.com) for Claude and the claude.ai
+  platform. This is an independent project and is not affiliated
+  with or endorsed by Anthropic.
+- The [AlDente](https://apphousekitchen.com/) macOS app, whose menu
+  bar UX inspired the layout of this app.
+- Homebrew maintainers for the excellent cask system.
 
 ## License
 
-MIT — see `LICENSE`.
+MIT — see [LICENSE](./LICENSE).
