@@ -208,8 +208,7 @@ public struct UsageSnapshot {
         projects.reduce(0) { $0 + $1.messagesToday }
     }
 
-    public var sessionTokens: Int { sessionTokensRaw }
-    public var sessionTokensRaw: Int = 0
+    public var sessionTokens: Int = 0
     public var sessionCost: Double = 0
     public var sessionStart: Date?
     public var sessionEnd: Date?
