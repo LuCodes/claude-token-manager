@@ -2,10 +2,51 @@ import Foundation
 import SwiftUI
 import Combine
 
+public struct ProjectDisplayInfo: Hashable, Identifiable {
+    public let rawName: String
+    public let displayName: String
+    public var id: String { rawName }
+
+    public init(rawName: String) {
+        self.rawName = rawName
+        self.displayName = Self.extractDisplayName(from: rawName)
+    }
+
+    private static func extractDisplayName(from rawName: String) -> String {
+        guard rawName.hasPrefix("-") else { return rawName }
+
+        // Read cwd from jsonl files in this project folder
+        if let projectsDir = ClaudeProjectsPathResolver.resolve() {
+            let projectDir = projectsDir.appendingPathComponent(rawName)
+            if let contents = try? FileManager.default.contentsOfDirectory(
+                at: projectDir, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]
+            ), let firstJsonl = contents.first(where: { $0.pathExtension == "jsonl" }),
+               let data = try? Data(contentsOf: firstJsonl, options: .mappedIfSafe),
+               let content = String(data: data, encoding: .utf8) {
+                // Search first 50 lines for a "cwd" field
+                for line in content.split(separator: "\n").prefix(50) {
+                    guard let json = try? JSONSerialization.jsonObject(
+                        with: Data(line.utf8)) as? [String: Any],
+                          let cwd = json["cwd"] as? String, !cwd.isEmpty else {
+                        continue
+                    }
+                    return (cwd as NSString).lastPathComponent
+                }
+            }
+        }
+
+        // Fallback: last segment (imprecise for names with hyphens)
+        let trimmed = rawName.hasPrefix("-") ? String(rawName.dropFirst()) : rawName
+        let parts = trimmed.split(separator: "-").map(String.init)
+        return parts.last ?? rawName
+    }
+}
+
 @MainActor
 public final class UsageStore: ObservableObject {
     @Published public var snapshot: UsageSnapshot = UsageSnapshot()
     @Published public var isLoading: Bool = true
+    @Published public var availableProjects: [ProjectDisplayInfo] = []
     @Published public var selectedProjectId: String {
         didSet { UserDefaults.standard.set(selectedProjectId, forKey: "selectedProjectId") }
     }
@@ -74,6 +115,11 @@ public final class UsageStore: ObservableObject {
         migrateLegacyBudgetIfNeeded()
         refreshDataSources()
         pruneStaleCredentialsIfNeeded()
+
+        // Optimistic: if credentials exist and mode is on, assume connected
+        if claudeAIModeEnabled && ClaudeAIDataSource.hasStoredCredentials() {
+            claudeAIConnectionStatus = .connected
+        }
         refresh()
         startWatching()
         startPeriodicRefresh()
@@ -88,6 +134,7 @@ public final class UsageStore: ObservableObject {
     // MARK: - Refresh
 
     public func refresh() {
+        refreshAvailableProjects()
         let primary = primaryDataSource
         let fallback = fallbackDataSource
         Task.detached(priority: .userInitiated) {
@@ -100,15 +147,21 @@ public final class UsageStore: ObservableObject {
                 self.activeSourceId = sourceId
                 self.isLoading = false
                 if self.selectedProjectId != UsageSnapshot.allProjectsId,
-                   !newSnapshot.projects.contains(where: { $0.id == self.selectedProjectId }) {
+                   !self.availableProjects.contains(where: { $0.rawName == self.selectedProjectId }) {
                     self.selectedProjectId = UsageSnapshot.allProjectsId
                 }
                 self.evaluateAllNotifications()
-                if sourceId == "claude-ai" {
-                    UserDefaults.standard.set(
-                        Date().timeIntervalSince1970,
-                        forKey: "claudeAILastSuccessfulFetch"
-                    )
+                // Update connection status based on actual fetch result
+                if self.claudeAIModeEnabled {
+                    if sourceId == "claude-ai" {
+                        self.claudeAIConnectionStatus = .connected
+                        UserDefaults.standard.set(
+                            Date().timeIntervalSince1970,
+                            forKey: "claudeAILastSuccessfulFetch"
+                        )
+                    } else if ClaudeAIDataSource.hasStoredCredentials() && sourceId != "claude-ai" {
+                        self.claudeAIConnectionStatus = .expired
+                    }
                 }
             }
         }
@@ -134,6 +187,35 @@ public final class UsageStore: ObservableObject {
         }
 
         return (UsageSnapshot(), "none")
+    }
+
+    // MARK: - Available projects (always from local filesystem)
+
+    private func refreshAvailableProjects() {
+        guard let projectsDir = ClaudeProjectsPathResolver.resolve() else {
+            availableProjects = []
+            return
+        }
+
+        let contents = (try? FileManager.default.contentsOfDirectory(
+            at: projectsDir,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        )) ?? []
+
+        let projects = contents.compactMap { url -> ProjectDisplayInfo? in
+            var isDir: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir),
+                  isDir.boolValue else { return nil }
+            // Check has at least one jsonl
+            let jsonls = (try? FileManager.default.contentsOfDirectory(
+                at: url, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]
+            ))?.contains { $0.pathExtension == "jsonl" } ?? false
+            guard jsonls else { return nil }
+            return ProjectDisplayInfo(rawName: url.lastPathComponent)
+        }
+
+        availableProjects = projects.sorted { $0.displayName.lowercased() < $1.displayName.lowercased() }
     }
 
     // MARK: - Data source management
@@ -254,7 +336,8 @@ public final class UsageStore: ObservableObject {
         }
     }
 
-    private func startWatching() {
+    public func startWatching() {
+        fileWatcher?.stop()
         let url = LogScanner.shared.claudeProjectsDir
         fileWatcher = FileWatcher(url: url) { [weak self] in
             Task { @MainActor in self?.refresh() }

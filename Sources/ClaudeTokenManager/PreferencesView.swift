@@ -24,11 +24,15 @@ extension View {
 
 struct PreferencesView: View {
     @EnvironmentObject var store: UsageStore
-    @Binding var isOpen: Bool
+    var onClose: (() -> Void)?
+
     @State private var orgIdInput: String = ""
     @State private var sessionKeyInput: String = ""
     @State private var isTesting: Bool = false
     @State private var isEditing: Bool = false
+    @State private var customPathInput: String = ClaudeProjectsPathResolver.userConfiguredPath() ?? ""
+    @State private var customPathFeedback: String = ""
+    @State private var customPathIsValid: Bool = false
 
     private let tintBlue = Color(red: 55/255, green: 138/255, blue: 221/255)
 
@@ -38,10 +42,14 @@ struct PreferencesView: View {
             budgetCard
             launchAtLoginCard
             claudeAISyncCard
+            projectsPathCard
             infoCard
             Divider().background(Color.white.opacity(0.08))
             footer
         }
+        .padding(16)
+        .background(Color(red: 31/255, green: 31/255, blue: 30/255))
+        .foregroundColor(Color(red: 241/255, green: 239/255, blue: 232/255))
         .onAppear {
             if let orgId = ClaudeAIDataSource.loadOrgId() {
                 orgIdInput = orgId
@@ -53,7 +61,7 @@ struct PreferencesView: View {
 
     private var header: some View {
         HStack {
-            Button(action: { isOpen = false }) {
+            Button(action: { onClose?() }) {
                 HStack(spacing: 4) {
                     Image(systemName: "chevron.left").font(.system(size: 11, weight: .medium))
                     Text("Back").font(AppFont.inter(size: 12))
@@ -61,9 +69,9 @@ struct PreferencesView: View {
             }.buttonStyle(.plain)
             Spacer()
             Text("Preferences")
-                .font(AppFont.inter(size: 13, weight: .medium))
+                .font(AppFont.inter(size: 14, weight: .semibold))
             Spacer()
-            Spacer().frame(width: 56)
+            Spacer().frame(width: 60)
         }
     }
 
@@ -136,9 +144,8 @@ struct PreferencesView: View {
             if store.claudeAIModeEnabled {
                 Divider().background(Color.white.opacity(0.1))
 
-                if ClaudeAIDataSource.hasStoredCredentials() &&
-                   store.claudeAIConnectionStatus == .connected && !isEditing {
-                    connectedView
+                if ClaudeAIDataSource.hasStoredCredentials() && !isEditing {
+                    connectedMaskedView
                 } else {
                     credentialsForm
                 }
@@ -155,6 +162,86 @@ struct PreferencesView: View {
         }
         .preferenceCard()
     }
+
+    // MARK: - Masked credentials view
+
+    private var connectedMaskedView: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(store.claudeAIConnectionStatus == .connected
+                              ? Color(red: 29/255, green: 158/255, blue: 117/255)
+                              : Color(red: 239/255, green: 159/255, blue: 39/255))
+                        .frame(width: 8, height: 8)
+                    Text(store.claudeAIConnectionStatus == .connected
+                         ? "Connected to claude.ai"
+                         : "Not connected")
+                        .font(AppFont.inter(size: 12, weight: .medium))
+                }
+                Spacer()
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                labeledMaskedRow(
+                    label: "Organization ID",
+                    masked: maskOrgId(ClaudeAIDataSource.loadOrgId() ?? "")
+                )
+                labeledMaskedRow(
+                    label: "Session cookie",
+                    masked: "sessionKey=\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}"
+                )
+            }
+
+            HStack(spacing: 8) {
+                Button("Edit") { isEditing = true }
+                    .buttonStyle(.plain)
+                    .font(AppFont.inter(size: 11, weight: .medium))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(Color.white.opacity(0.08))
+                    .cornerRadius(5)
+
+                Button("Disconnect") {
+                    store.clearClaudeAICredentials()
+                    orgIdInput = ""
+                    sessionKeyInput = ""
+                    isEditing = false
+                }
+                .buttonStyle(.plain)
+                .font(AppFont.inter(size: 11))
+                .foregroundColor(.white.opacity(0.5))
+            }
+        }
+    }
+
+    private func labeledMaskedRow(label: String, masked: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label)
+                .font(AppFont.inter(size: 10))
+                .foregroundColor(.white.opacity(0.5))
+            Text(masked)
+                .font(AppFont.inter(size: 11, weight: .medium))
+                .monospacedDigit()
+                .foregroundColor(.white.opacity(0.8))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background(Color.white.opacity(0.04))
+        .cornerRadius(5)
+    }
+
+    private func maskOrgId(_ orgId: String) -> String {
+        guard orgId.count > 6 else { return orgId }
+        let visibleCount = 6
+        let prefixLen = orgId.count - visibleCount
+        let hiddenChars = String(repeating: "\u{2022}", count: prefixLen)
+        let visible = String(orgId.suffix(visibleCount))
+        return hiddenChars + visible
+    }
+
+    // MARK: - Credentials form
 
     private var credentialsForm: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -228,34 +315,6 @@ struct PreferencesView: View {
         }
     }
 
-    private var connectedView: some View {
-        HStack {
-            HStack(spacing: 6) {
-                Circle()
-                    .fill(Color(red: 29/255, green: 158/255, blue: 117/255))
-                    .frame(width: 8, height: 8)
-                Text("Connected to claude.ai")
-                    .font(AppFont.inter(size: 11))
-                    .foregroundColor(.white.opacity(0.85))
-            }
-            Spacer()
-            Button("Edit") { isEditing = true }
-                .buttonStyle(.plain)
-                .font(AppFont.inter(size: 10))
-                .foregroundColor(.white.opacity(0.5))
-
-            Button("Disconnect") {
-                store.clearClaudeAICredentials()
-                orgIdInput = ""
-                sessionKeyInput = ""
-                isEditing = false
-            }
-            .buttonStyle(.plain)
-            .font(AppFont.inter(size: 10))
-            .foregroundColor(.white.opacity(0.5))
-        }
-    }
-
     private var statusText: String? {
         switch store.claudeAIConnectionStatus {
         case .unknown: return nil
@@ -290,6 +349,109 @@ struct PreferencesView: View {
                 }
             }
         }
+    }
+
+    // MARK: - Projects path
+
+    private var projectsPathCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Claude Code projects folder")
+                .font(AppFont.inter(size: 13, weight: .semibold))
+                .foregroundColor(.white.opacity(0.9))
+
+            Text("Where Claude Code stores your project logs (.jsonl files)")
+                .font(AppFont.inter(size: 11))
+                .foregroundColor(.white.opacity(0.5))
+
+            if let resolved = ClaudeProjectsPathResolver.resolve() {
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(Color(red: 29/255, green: 158/255, blue: 117/255))
+                        .frame(width: 6, height: 6)
+                    Text("Detected: \(resolved.path.replacingOccurrences(of: NSHomeDirectory(), with: "~"))")
+                        .font(AppFont.inter(size: 10))
+                        .foregroundColor(.white.opacity(0.6))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+            } else {
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(Color(red: 239/255, green: 159/255, blue: 39/255))
+                        .frame(width: 6, height: 6)
+                    Text("No projects folder detected")
+                        .font(AppFont.inter(size: 10))
+                        .foregroundColor(.white.opacity(0.6))
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Custom folder (optional)")
+                    .font(AppFont.inter(size: 10))
+                    .foregroundColor(.white.opacity(0.5))
+                HStack(spacing: 6) {
+                    TextField("e.g. ~/Documents/Claude", text: $customPathInput)
+                        .textFieldStyle(.plain)
+                        .font(AppFont.inter(size: 11))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 6)
+                        .background(Color.white.opacity(0.06))
+                        .cornerRadius(5)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 5)
+                                .stroke(Color.white.opacity(0.12), lineWidth: 0.5)
+                        )
+                    Button("Save") { saveCustomPath() }
+                        .buttonStyle(.plain)
+                        .font(AppFont.inter(size: 11, weight: .medium))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(Color(red: 55/255, green: 138/255, blue: 221/255))
+                        .foregroundColor(.white)
+                        .cornerRadius(5)
+                        .focusable(false)
+                }
+            }
+
+            if !customPathFeedback.isEmpty {
+                Text(customPathFeedback)
+                    .font(AppFont.inter(size: 10))
+                    .foregroundColor(
+                        customPathIsValid
+                            ? Color(red: 29/255, green: 158/255, blue: 117/255)
+                            : Color(red: 216/255, green: 90/255, blue: 48/255)
+                    )
+            }
+        }
+        .preferenceCard()
+    }
+
+    private func saveCustomPath() {
+        let trimmed = customPathInput.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if trimmed.isEmpty {
+            ClaudeProjectsPathResolver.setUserConfiguredPath(nil)
+            customPathFeedback = "Custom path cleared, using auto-detection"
+            customPathIsValid = true
+            store.startWatching()
+            store.refresh()
+            return
+        }
+
+        let expanded = (trimmed as NSString).expandingTildeInPath
+        var isDir: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: expanded, isDirectory: &isDir),
+              isDir.boolValue else {
+            customPathFeedback = "Folder does not exist"
+            customPathIsValid = false
+            return
+        }
+
+        ClaudeProjectsPathResolver.setUserConfiguredPath(trimmed)
+        customPathFeedback = "Saved. Rescan in progress..."
+        customPathIsValid = true
+        store.startWatching()
+        store.refresh()
     }
 
     // MARK: - Info card
