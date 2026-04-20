@@ -1,28 +1,35 @@
 # Claude Token Manager
 
-A native macOS menu bar app that mirrors Claude's plan usage limits — powered by local Claude Code logs.
+A native macOS menu bar app that tracks your Claude Code token usage and API-equivalent costs — powered entirely by local logs.
 
 ## What it shows
 
-- **Menu bar icon** (Claude burst) + the hottest percentage across all your usage bars. Color shifts to amber at 80 %, coral at 95 % so you know at a glance.
+- **Menu bar icon** (Claude burst) + today's API-equivalent cost (e.g. `$12.40`) or token count. Color shifts to amber/coral when approaching your daily budget.
+- **Today's usage** with cost and token breakdown.
+- **Model breakdown**: Opus / Sonnet / Haiku cards showing cost and tokens per model.
 - **Current 5 h rolling session** with reset countdown.
-- **Weekly limits** per model: all models combined / Sonnet only / Opus. Each with its own reset time.
+- **Weekly total** with reset time.
+- **Top project** of the day.
 - **Project picker**: view usage across all projects or filter to one specific Claude Code project.
-- **Plan picker**: Pro, Max 5×, Max 20×. Usage thresholds adapt to the selected plan.
-- **Discreet notifications** at 80 % and 95 %. Silent banner, no sound, one notification per threshold per reset window. Toggle from the gear icon.
+- **Daily budget** with threshold notifications at 80 % and 95 %. Set in $ or tokens.
+- **Display format toggle**: switch between cost and tokens everywhere in the app.
+
+## Important note
+
+This app measures your Claude Code usage from local logs and calculates costs at Anthropic API rates. **If you're on a Pro or Max subscription, your actual cost is the fixed price of your plan** — the dollar amounts shown are what you *would* pay at API rates. To see your real plan limits, use the "Open claude.ai" link in Preferences.
 
 ## Install
 
 Download the latest `.zip` from the [Releases page](https://github.com/LuCodes/claude-token-manager/releases/latest), unzip, drag to `/Applications`, launch.
 
-First time you open an ad-hoc signed app: right-click → Open → Open. macOS prompts once, then trusts it.
+First time you open an ad-hoc signed app: right-click → Open → Open.
 
 ### One-liner install
 
 ```bash
-curl -L -o /tmp/ctb.zip \
+curl -L -o /tmp/ctm.zip \
   "https://github.com/LuCodes/claude-token-manager/releases/latest/download/ClaudeTokenManager.zip" && \
-  unzip -o /tmp/ctb.zip -d /Applications/ && \
+  unzip -o /tmp/ctm.zip -d /Applications/ && \
   xattr -dr com.apple.quarantine "/Applications/Claude Token Manager.app" && \
   open "/Applications/Claude Token Manager.app"
 ```
@@ -41,34 +48,32 @@ Requires macOS 13+ and Xcode Command Line Tools (Swift 5.9+).
 
 ## Start at login
 
-System Settings → General → Login Items → add *Claude Token Manager*.
+Enabled by default. Toggle in Preferences (gear icon) → "Lancer au démarrage".
 
 ## How it works
 
-Claude Code writes a JSONL transcript for every session to `~/.claude/projects/<project-hash>/<session-id>.jsonl`. Each assistant message includes precise token usage (input, output, cache creation, cache read) plus the model. This app parses those logs, aggregates by project and by time window, and watches the directory via `FSEvents` so the dropdown updates in real time.
+Claude Code writes a JSONL transcript for every session to `~/.claude/projects/<project-hash>/<session-id>.jsonl`. Each assistant message includes precise token usage (input, output, cache creation, cache read) plus the model name. This app parses those logs, computes API-equivalent costs using Anthropic's published pricing, aggregates by project and time window, and watches the directory via `FSEvents` so the dropdown updates in real time.
 
-Works on all Claude Code plans — API, Pro, and Max. The logs exist regardless of subscription type.
-
-**Note on accuracy.** Anthropic doesn't publish exact token caps for subscription plans. The percentages are estimates based on their public communication ("15–35 h Opus per week on Max", etc.). See `Sources/ClaudeTokenManagerCore/PlanLimits.swift` to adjust thresholds for your own plan if needed. The app doesn't see claude.ai or Claude Desktop usage — only Claude Code.
+Works on all Claude Code setups — API, Pro, and Max. The logs exist regardless of subscription type.
 
 ## Typography
 
-The app uses Inter when installed on your system, with a clean fallback to SF Pro. Install Inter from [rsms.me/inter](https://rsms.me/inter/) for the intended look.
+Uses Inter when installed on your system, with a clean fallback to SF Pro. Install Inter from [rsms.me/inter](https://rsms.me/inter/) for the intended look.
 
 ## Project layout
 
 ```
 Sources/
   ClaudeTokenManagerCore/           ← logic layer, no UI
-    Models.swift                ← UsageSnapshot, ProjectUsage, ModelUsage, pricing
+    Models.swift                ← UsageSnapshot, ProjectUsage, ModelUsage, pricing, formatters
     LogScanner.swift            ← JSONL parsing and aggregation
-    PlanLimits.swift            ← plan thresholds + window math
-    NotificationManager.swift   ← threshold notifications with dedup
+    NotificationManager.swift   ← daily budget notifications with dedup
     UsageStore.swift            ← ObservableObject, FSEvents watcher
   ClaudeTokenManager/               ← SwiftUI layer
-    ClaudeTokenManagerApp.swift     ← @main, MenuBarExtra, dynamic menu bar label
-    DropdownView.swift          ← main dropdown
-    PreferencesView.swift       ← gear-icon settings panel
+    ClaudeTokenManagerApp.swift     ← @main, MenuBarExtra, single-instance guard
+    DropdownView.swift          ← main dropdown with model breakdown cards
+    PreferencesView.swift       ← settings: format, budget, login, info
+    LoginItem.swift             ← SMAppService wrapper
     AppFont.swift               ← Inter/SF Pro helper
     Resources/
       Assets.xcassets/
