@@ -189,7 +189,25 @@ struct DropdownView: View {
     // MARK: - Local detail (compact, shown below remote bars)
 
     private var localDetailSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        let tokens = store.selectedProject.todayTotalTokens
+        let cost = store.selectedProject.todayTotalCost
+        let primaryLabel: String
+        let primaryValue: String
+        let secondaryLabel: String
+        let secondaryValue: String
+        if store.displayFormat == .cost {
+            primaryLabel = "Co\u{00FB}t \u{00E9}quiv. API"
+            primaryValue = CostFormatter.format(cost)
+            secondaryLabel = "Tokens"
+            secondaryValue = "\(TokenFormatter.compact(tokens)) tokens"
+        } else {
+            primaryLabel = "Tokens"
+            primaryValue = "\(TokenFormatter.compact(tokens)) tokens"
+            secondaryLabel = "Co\u{00FB}t \u{00E9}quiv. API"
+            secondaryValue = CostFormatter.format(cost)
+        }
+
+        return VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text("D\u{00E9}tail local (Claude Code)")
                     .font(AppFont.inter(size: 11, weight: .medium))
@@ -197,8 +215,8 @@ struct DropdownView: View {
                 Spacer()
             }
             HStack(spacing: 12) {
-                compactMetric(label: "Aujourd'hui", value: "\(TokenFormatter.compact(store.selectedProject.todayTotalTokens)) tokens")
-                compactMetric(label: "Co\u{00FB}t \u{00E9}quiv. API", value: CostFormatter.format(store.selectedProject.todayTotalCost))
+                compactMetric(label: primaryLabel, value: primaryValue)
+                compactMetric(label: secondaryLabel, value: secondaryValue)
             }
         }
         .padding(.horizontal, 12)
