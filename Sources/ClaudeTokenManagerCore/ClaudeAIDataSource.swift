@@ -104,6 +104,32 @@ public final class ClaudeAIDataSource: DataSource, @unchecked Sendable {
             week[key] = usage
         }
         snapshot.weekByModel = week
+
+        // Build remote progress bars for the UI
+        var bars: [RemoteProgressBar] = []
+        if let pool = raw.fiveHour {
+            bars.append(RemoteProgressBar(id: "session", label: "Session actuelle", percent: pool.utilization, resetsAt: pool.resetsAt))
+        }
+        if let pool = raw.sevenDay {
+            bars.append(RemoteProgressBar(id: "all", label: "Tous les mod\u{00E8}les", percent: pool.utilization, resetsAt: pool.resetsAt))
+        }
+        if let pool = raw.sevenDaySonnet {
+            bars.append(RemoteProgressBar(id: "sonnet", label: "Sonnet seulement", percent: pool.utilization, resetsAt: pool.resetsAt))
+        }
+        if let pool = raw.sevenDayOpus {
+            bars.append(RemoteProgressBar(id: "opus", label: "Opus", percent: pool.utilization, resetsAt: pool.resetsAt))
+        }
+        if let pool = raw.sevenDayOmelette {
+            bars.append(RemoteProgressBar(id: "design", label: "Claude Design", percent: pool.utilization, resetsAt: pool.resetsAt))
+        }
+        if let pool = raw.sevenDayCowork {
+            bars.append(RemoteProgressBar(id: "cowork", label: "Cowork", percent: pool.utilization, resetsAt: pool.resetsAt))
+        }
+        if let pool = raw.sevenDayOauthApps {
+            bars.append(RemoteProgressBar(id: "oauth", label: "Int\u{00E9}grations OAuth", percent: pool.utilization, resetsAt: pool.resetsAt))
+        }
+        snapshot.remoteProgressBars = bars
+
         snapshot.lastUpdate = Date()
         return snapshot
     }
