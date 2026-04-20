@@ -35,17 +35,11 @@ struct MenuBarLabel: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            Group {
-                if Bundle.module.image(forResource: NSImage.Name("MenuBarIcon")) != nil {
-                    Image("MenuBarIcon", bundle: .module)
-                        .renderingMode(.template)
-                        .resizable()
-                        .scaledToFit()
-                } else {
-                    Image(systemName: "sparkles")
-                }
-            }
-            .frame(width: 15, height: 15)
+            Image("MenuBarIcon", bundle: .module)
+                .renderingMode(.template)
+                .resizable()
+                .scaledToFit()
+                .frame(width: 15, height: 15)
             Text(labelText)
                 .font(AppFont.inter(size: 11, weight: .medium))
                 .monospacedDigit()

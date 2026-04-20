@@ -49,6 +49,14 @@ elif [ -f "AppIcon.icns" ]; then
     cp AppIcon.icns "$APP_BUNDLE/Contents/Resources/"
 fi
 
+# Copy SPM module bundle (contains Assets.xcassets with MenuBarIcon)
+ARCH=$(uname -m)
+MODULE_BUNDLE=".build/${ARCH}-apple-macosx/${CONFIG}/${EXECUTABLE}_${EXECUTABLE}.bundle"
+if [ -d "$MODULE_BUNDLE" ]; then
+    cp -R "$MODULE_BUNDLE" "$APP_BUNDLE/Contents/Resources/"
+    echo "  ✓ Module bundle copied"
+fi
+
 # Copy notification icon to bundle Resources
 NOTIF_ICON="Sources/ClaudeTokenManager/Resources/NotificationIcon.png"
 if [ -f "$NOTIF_ICON" ]; then
