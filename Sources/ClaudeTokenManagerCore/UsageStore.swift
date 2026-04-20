@@ -115,7 +115,7 @@ public final class UsageStore: ObservableObject {
                    !newSnapshot.projects.contains(where: { $0.id == self.selectedProjectId }) {
                     self.selectedProjectId = UsageSnapshot.allProjectsId
                 }
-                self.evaluateBudgetNotifications()
+                self.evaluateAllNotifications()
                 if sourceId == "claude-ai" {
                     UserDefaults.standard.set(
                         Date().timeIntervalSince1970,
@@ -223,6 +223,15 @@ public final class UsageStore: ObservableObject {
     }
 
     // MARK: - Notifications
+
+    private func evaluateAllNotifications() {
+        // Progress bar notifications (claude.ai mode)
+        for bar in snapshot.remoteProgressBars {
+            NotificationManager.shared.evaluateProgressBar(bar)
+        }
+        // Budget notifications (local mode)
+        evaluateBudgetNotifications()
+    }
 
     private func evaluateBudgetNotifications() {
         guard let budget = dailyBudgetValue, budget > 0 else { return }
