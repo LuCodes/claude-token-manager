@@ -38,7 +38,7 @@ struct MenuBarLabel: View {
             Image(nsImage: loadMenuBarIcon())
                 .resizable()
                 .scaledToFit()
-                .frame(width: 15, height: 15)
+                .frame(width: 13, height: 13)
             Text(labelText)
                 .font(AppFont.inter(size: 11, weight: .medium))
                 .monospacedDigit()
