@@ -2,12 +2,11 @@ import Foundation
 import UserNotifications
 import AppKit
 
-/// Sends budget threshold notifications (80% and 95% of daily budget).
+/// Sends budget threshold notifications and claude.ai bar alerts.
 public final class NotificationManager {
 
     public static let shared = NotificationManager()
 
-    private let center = UNUserNotificationCenter.current()
     private let dedupKey = "firedAlerts_v1"
 
     public enum Threshold: Int, CaseIterable {
@@ -34,6 +33,7 @@ public final class NotificationManager {
     }
 
     public func requestAuthorizationIfNeeded() async -> Bool {
+        guard let center = notificationCenter() else { return false }
         do {
             return try await center.requestAuthorization(options: [.alert])
         } catch {
@@ -51,11 +51,9 @@ public final class NotificationManager {
             let key = "budget-\(threshold.rawValue)-\(Int(today.timeIntervalSince1970))"
             if firedAlerts[key] != nil { continue }
 
-            fireNotification(
-                currentValue: currentValue,
-                budget: budget,
-                isMoney: isMoney,
-                threshold: threshold
+            fireBudgetNotification(
+                currentValue: currentValue, budget: budget,
+                isMoney: isMoney, threshold: threshold
             )
             var updated = firedAlerts
             updated[key] = Date()
@@ -65,7 +63,6 @@ public final class NotificationManager {
     }
 
     /// Evaluate a claude.ai progress bar and fire notification if it crosses a threshold.
-    /// Uses bar.id + windowEnd as dedup key so each bar fires independently per reset window.
     public func evaluateProgressBar(_ bar: RemoteProgressBar) {
         let percent = Int(bar.clampedPercent.rounded(.down))
         let today = Calendar.current.startOfDay(for: Date())
@@ -88,32 +85,20 @@ public final class NotificationManager {
         return firedAlerts[key] != nil
     }
 
-    private func fireProgressBarNotification(bar: RemoteProgressBar, percent: Int, threshold: Threshold) {
-        let content = UNMutableNotificationContent()
-        content.title = "\(bar.label) \u{00E0} \(threshold.label)"
-        if let resetsAt = bar.resetsAt {
-            let formatter = DateFormatter()
-            formatter.locale = Locale(identifier: "fr_FR")
-            formatter.dateFormat = "EEE HH:mm"
-            content.body = "R\u{00E9}initialisation \(formatter.string(from: resetsAt))"
-        } else {
-            content.body = "\(percent) % atteints"
-        }
-        content.sound = nil
-
-        let request = UNNotificationRequest(
-            identifier: UUID().uuidString,
-            content: content,
-            trigger: nil
-        )
-        center.add(request) { _ in }
-    }
-
     public func clearAllFiredAlerts() {
         UserDefaults.standard.removeObject(forKey: dedupKey)
     }
 
-    private func fireNotification(currentValue: Double, budget: Double, isMoney: Bool, threshold: Threshold) {
+    // MARK: - Private
+
+    /// Returns UNUserNotificationCenter only when running as an app bundle.
+    /// Returns nil in test/CLI environments where it would crash.
+    private func notificationCenter() -> UNUserNotificationCenter? {
+        guard Bundle.main.bundleURL.pathExtension == "app" else { return nil }
+        return UNUserNotificationCenter.current()
+    }
+
+    private func fireBudgetNotification(currentValue: Double, budget: Double, isMoney: Bool, threshold: Threshold) {
         let content = UNMutableNotificationContent()
         content.title = "Budget quotidien \u{00E0} \(threshold.label)"
 
@@ -128,12 +113,25 @@ public final class NotificationManager {
         }
         content.sound = nil
 
-        let request = UNNotificationRequest(
-            identifier: UUID().uuidString,
-            content: content,
-            trigger: nil
-        )
-        center.add(request) { _ in }
+        let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
+        notificationCenter()?.add(request) { _ in }
+    }
+
+    private func fireProgressBarNotification(bar: RemoteProgressBar, percent: Int, threshold: Threshold) {
+        let content = UNMutableNotificationContent()
+        content.title = "\(bar.label) \u{00E0} \(threshold.label)"
+        if let resetsAt = bar.resetsAt {
+            let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "fr_FR")
+            formatter.dateFormat = "EEE HH:mm"
+            content.body = "R\u{00E9}initialisation \(formatter.string(from: resetsAt))"
+        } else {
+            content.body = "\(percent) % atteints"
+        }
+        content.sound = nil
+
+        let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
+        notificationCenter()?.add(request) { _ in }
     }
 
     private func pruneOldEntries() {
