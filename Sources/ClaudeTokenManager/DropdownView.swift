@@ -30,34 +30,199 @@ struct DropdownView: View {
     @ViewBuilder
     private var mainContent: some View {
         header
+        Spacer().frame(height: 8)
+
         if store.claudeAIModeEnabled && store.claudeAIConnectionStatus == .connected {
-            Spacer().frame(height: 6)
-            HStack(spacing: 4) {
-                Circle()
-                    .fill(Color(red: 29/255, green: 158/255, blue: 117/255))
-                    .frame(width: 6, height: 6)
-                Text("Chiffres r\u{00E9}els claude.ai")
-                    .font(AppFont.inter(size: 10))
-                    .foregroundColor(.white.opacity(0.6))
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(Color(red: 29/255, green: 158/255, blue: 117/255).opacity(0.1))
-            .cornerRadius(6)
+            connectedStatusBadge
+            Spacer().frame(height: 10)
         } else if store.claudeAIModeEnabled && store.claudeAIConnectionStatus == .expired {
-            Spacer().frame(height: 6)
-            HStack(spacing: 4) {
-                Circle()
-                    .fill(Color(red: 216/255, green: 90/255, blue: 48/255))
-                    .frame(width: 6, height: 6)
-                Text("Session claude.ai expir\u{00E9}e")
-                    .font(AppFont.inter(size: 10))
-                    .foregroundColor(Color(red: 216/255, green: 90/255, blue: 48/255))
-            }
+            expiredStatusBadge
+            Spacer().frame(height: 10)
         }
-        Spacer().frame(height: 12)
+
         projectMenu
         Spacer().frame(height: 14)
+
+        if !store.snapshot.remoteProgressBars.isEmpty {
+            remoteBarsSection
+            Spacer().frame(height: 14)
+            localDetailSection
+        } else {
+            localMainLayout
+        }
+
+        Spacer().frame(height: 12)
+        Divider().background(Color.white.opacity(0.08))
+        Spacer().frame(height: 8)
+        footer
+    }
+
+    private var connectedStatusBadge: some View {
+        HStack(spacing: 4) {
+            Circle()
+                .fill(Color(red: 29/255, green: 158/255, blue: 117/255))
+                .frame(width: 6, height: 6)
+            Text("Chiffres r\u{00E9}els claude.ai")
+                .font(AppFont.inter(size: 10))
+                .foregroundColor(.white.opacity(0.6))
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(Color(red: 29/255, green: 158/255, blue: 117/255).opacity(0.1))
+        .cornerRadius(6)
+    }
+
+    private var expiredStatusBadge: some View {
+        HStack(spacing: 4) {
+            Circle()
+                .fill(Color(red: 216/255, green: 90/255, blue: 48/255))
+                .frame(width: 6, height: 6)
+            Text("Session claude.ai expir\u{00E9}e")
+                .font(AppFont.inter(size: 10))
+                .foregroundColor(Color(red: 216/255, green: 90/255, blue: 48/255))
+        }
+    }
+
+    // MARK: - Remote bars (claude.ai mode)
+
+    private var remoteBarsSection: some View {
+        let bars = store.snapshot.remoteProgressBars
+        let sessionBars = bars.filter { $0.id == "session" }
+        let weeklyBars = bars.filter { $0.id != "session" }
+
+        return VStack(alignment: .leading, spacing: 12) {
+            ForEach(sessionBars) { bar in
+                remoteBarCard(bar, emphasized: true)
+            }
+
+            if !weeklyBars.isEmpty {
+                HStack {
+                    Text("Limites hebdomadaires")
+                        .font(AppFont.inter(size: 13, weight: .medium))
+                    Spacer()
+                    Text(relativeTime(store.snapshot.lastUpdate))
+                        .font(AppFont.inter(size: 10))
+                        .foregroundColor(.white.opacity(0.4))
+                }
+                VStack(spacing: 8) {
+                    ForEach(weeklyBars) { bar in
+                        remoteBarCard(bar, emphasized: false)
+                    }
+                }
+            }
+        }
+    }
+
+    private func remoteBarCard(_ bar: RemoteProgressBar, emphasized: Bool) -> some View {
+        let percent = Int(bar.clampedPercent.rounded(.down))
+        let color = colorForHue(bar.hue)
+
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(bar.label)
+                    .font(AppFont.inter(size: emphasized ? 13 : 12, weight: .medium))
+                Spacer()
+                Text("\(percent) % utilis\u{00E9}s")
+                    .font(AppFont.inter(size: 11, weight: .medium))
+                    .foregroundColor(bar.percent >= 80 ? color : .white.opacity(0.85))
+                    .monospacedDigit()
+            }
+            if let reset = bar.resetsAt {
+                Text(resetLabel(for: reset))
+                    .font(AppFont.inter(size: 10))
+                    .foregroundColor(.white.opacity(0.4))
+            }
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 999)
+                        .fill(Color.white.opacity(0.08))
+                        .frame(height: emphasized ? 6 : 5)
+                    RoundedRectangle(cornerRadius: 999)
+                        .fill(color)
+                        .frame(
+                            width: max(2, geo.size.width * (bar.clampedPercent / 100)),
+                            height: emphasized ? 6 : 5
+                        )
+                }
+            }
+            .frame(height: emphasized ? 6 : 5)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(Color.white.opacity(0.04))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .strokeBorder(
+                    (emphasized && bar.percent >= 70) ? color.opacity(0.35) : .clear,
+                    lineWidth: 0.5
+                )
+        )
+    }
+
+    private func colorForHue(_ hue: RemoteProgressBar.Hue) -> Color {
+        switch hue {
+        case .blue:   return Color(red: 55/255, green: 138/255, blue: 221/255)
+        case .green:  return Color(red: 29/255, green: 158/255, blue: 117/255)
+        case .coral:  return Color(red: 216/255, green: 90/255, blue: 48/255)
+        case .amber:  return Color(red: 239/255, green: 159/255, blue: 39/255)
+        case .purple: return Color(red: 83/255, green: 74/255, blue: 183/255)
+        case .gray:   return Color.gray.opacity(0.7)
+        }
+    }
+
+    private func resetLabel(for date: Date) -> String {
+        let interval = date.timeIntervalSince(Date())
+        if interval < 0 { return "R\u{00E9}initialisation imminente" }
+        if interval < 24 * 3600 {
+            let h = Int(interval) / 3600
+            let m = (Int(interval) % 3600) / 60
+            if h > 0 { return "R\u{00E9}initialisation dans \(h) h \(m) min" }
+            return "R\u{00E9}initialisation dans \(m) min"
+        }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "fr_FR")
+        formatter.dateFormat = "EEE HH:mm"
+        return "R\u{00E9}initialisation \(formatter.string(from: date))"
+    }
+
+    // MARK: - Local detail (compact, shown below remote bars)
+
+    private var localDetailSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("D\u{00E9}tail local (Claude Code)")
+                    .font(AppFont.inter(size: 11, weight: .medium))
+                    .foregroundColor(.white.opacity(0.5))
+                Spacer()
+            }
+            HStack(spacing: 12) {
+                compactMetric(label: "Aujourd'hui", value: "\(TokenFormatter.compact(store.selectedProject.todayTotalTokens)) tokens")
+                compactMetric(label: "Co\u{00FB}t \u{00E9}quiv. API", value: CostFormatter.format(store.selectedProject.todayTotalCost))
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(Color.white.opacity(0.02))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+
+    private func compactMetric(label: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label)
+                .font(AppFont.inter(size: 10))
+                .foregroundColor(.white.opacity(0.4))
+            Text(value)
+                .font(AppFont.inter(size: 12, weight: .medium))
+                .monospacedDigit()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    // MARK: - Local main layout (unchanged from v1.0.1)
+
+    @ViewBuilder
+    private var localMainLayout: some View {
         sectionTitle("Aujourd'hui")
         Spacer().frame(height: 8)
         todayBigCard
@@ -77,10 +242,6 @@ struct DropdownView: View {
             Spacer().frame(height: 10)
             topProjectRow(name: top.name, cost: top.cost)
         }
-        Spacer().frame(height: 12)
-        Divider().background(Color.white.opacity(0.08))
-        Spacer().frame(height: 8)
-        footer
     }
 
     // MARK: - Header
@@ -313,6 +474,15 @@ struct DropdownView: View {
             .padding(.vertical, 10)
             .background(Color.white.opacity(0.04))
             .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+
+    private func relativeTime(_ date: Date?) -> String {
+        guard let date = date else { return "\u{2014}" }
+        let seconds = Date().timeIntervalSince(date)
+        if seconds < 60 { return "\u{00E0} l'instant" }
+        if seconds < 3600 { return "il y a \(Int(seconds / 60)) min" }
+        if seconds < 86400 { return "il y a \(Int(seconds / 3600))h" }
+        return "il y a \(Int(seconds / 86400))j"
     }
 
     // MARK: - Footer

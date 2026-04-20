@@ -75,6 +75,56 @@ final class ClaudeAPIClientTests: XCTestCase {
         XCTAssertNil(report.sevenDayOpus)
     }
 
+    func testConvertPopulatesRemoteProgressBars() {
+        let formatter = ISO8601DateFormatter()
+        let later = formatter.date(from: "2026-04-27T07:00:01Z")!
+
+        let raw = RawUsageReport(
+            fiveHour: .init(utilization: 78, resetsAt: later),
+            sevenDay: .init(utilization: 6, resetsAt: later),
+            sevenDayOauthApps: nil,
+            sevenDayOpus: nil,
+            sevenDaySonnet: .init(utilization: 1, resetsAt: later),
+            sevenDayCowork: nil,
+            sevenDayOmelette: .init(utilization: 43, resetsAt: later),
+            iguanaNecktie: nil,
+            omelettePromotional: nil,
+            extraUsage: nil
+        )
+        let snapshot = ClaudeAIDataSource.convert(raw: raw)
+
+        let bars = snapshot.remoteProgressBars
+        XCTAssertEqual(bars.count, 4)
+
+        let sessionBar = bars.first { $0.id == "session" }
+        XCTAssertNotNil(sessionBar)
+        XCTAssertEqual(sessionBar?.percent, 78)
+        XCTAssertEqual(sessionBar?.label, "Session actuelle")
+
+        let designBar = bars.first { $0.id == "design" }
+        XCTAssertEqual(designBar?.percent, 43)
+        XCTAssertEqual(designBar?.label, "Claude Design")
+
+        XCTAssertNil(bars.first { $0.id == "opus" })
+    }
+
+    func testHottestBarIsSessionWhenHighest() {
+        var snapshot = UsageSnapshot()
+        snapshot.remoteProgressBars = [
+            RemoteProgressBar(id: "session", label: "S", percent: 78, resetsAt: nil),
+            RemoteProgressBar(id: "design", label: "D", percent: 43, resetsAt: nil),
+            RemoteProgressBar(id: "all", label: "A", percent: 6, resetsAt: nil)
+        ]
+        XCTAssertEqual(snapshot.hottestRemoteBar?.id, "session")
+        XCTAssertEqual(snapshot.hottestRemoteBar?.percent, 78)
+    }
+
+    func testLocalModeHasNoRemoteBars() {
+        let snapshot = UsageSnapshot()
+        XCTAssertTrue(snapshot.remoteProgressBars.isEmpty)
+        XCTAssertNil(snapshot.hottestRemoteBar)
+    }
+
     func testConvertMapsPoolsCorrectly() {
         let formatter = ISO8601DateFormatter()
         let later = formatter.date(from: "2026-04-27T07:00:01Z")!
