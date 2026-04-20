@@ -27,7 +27,7 @@ public final class UsageStore: ObservableObject {
         }
     }
 
-    private var refreshTimer: Timer?
+    private var refreshTask: Task<Void, Never>?
     private var fileWatcher: FileWatcher?
     private static let selectedProjectKey = "selectedProjectId"
     private static let selectedPlanKey = "selectedPlan"
@@ -59,7 +59,7 @@ public final class UsageStore: ObservableObject {
     }
 
     deinit {
-        refreshTimer?.invalidate()
+        refreshTask?.cancel()
     }
 
     public func refresh() {
@@ -95,8 +95,12 @@ public final class UsageStore: ObservableObject {
     }
 
     private func startPeriodicRefresh() {
-        refreshTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.refresh() }
+        refreshTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 30_000_000_000)
+                guard !Task.isCancelled else { break }
+                self?.refresh()
+            }
         }
     }
 
