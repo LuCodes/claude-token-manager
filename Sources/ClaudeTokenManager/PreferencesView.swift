@@ -35,17 +35,30 @@ struct PreferencesView: View {
     private let tintBlue = Color(red: 55/255, green: 138/255, blue: 221/255)
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(spacing: 0) {
             header
-            budgetCard
-            launchAtLoginCard
-            claudeAISyncCard
-            projectsPathCard
-            infoCard
+                .padding(.horizontal, 16)
+                .padding(.top, 16)
+                .padding(.bottom, 10)
+
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 10) {
+                    budgetCard
+                    launchAtLoginCard
+                    claudeAISyncCard
+                    projectsPathCard
+                    infoCard
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 12)
+            }
+
             Divider().background(Color.white.opacity(0.08))
+
             footer
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
         }
-        .padding(16)
         .background(Color(red: 31/255, green: 31/255, blue: 30/255))
         .foregroundColor(Color(red: 241/255, green: 239/255, blue: 232/255))
     }
