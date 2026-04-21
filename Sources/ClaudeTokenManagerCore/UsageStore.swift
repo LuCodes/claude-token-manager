@@ -239,16 +239,19 @@ public final class UsageStore: ObservableObject {
     ) async {
         await MainActor.run { self.claudeAIConnectionStatus = .testing }
         do {
+            // Probe the API with the candidate credentials BEFORE writing anything
+            // to Keychain — a failed probe must not destroy previously valid creds.
+            _ = try await ClaudeAPIClient.shared.fetchUsageReport(
+                organizationId: orgId,
+                sessionKey: SessionKey(sessionKey)
+            )
             try ClaudeAIDataSource.saveCredentials(orgId: orgId, sessionKey: sessionKey)
-            let ds = ClaudeAIDataSource()
-            _ = try await ds.fetch()
             await MainActor.run {
                 self.claudeAIConnectionStatus = .connected
                 self.refreshDataSources()
                 self.refresh()
             }
         } catch let err as DataSourceError {
-            ClaudeAIDataSource.clearCredentials()
             let isAuth: Bool
             switch err {
             case .authenticationExpired, .authenticationRequired: isAuth = true
@@ -260,7 +263,6 @@ public final class UsageStore: ObservableObject {
                     : .error("Connection failed")
             }
         } catch {
-            ClaudeAIDataSource.clearCredentials()
             await MainActor.run {
                 self.claudeAIConnectionStatus = .error(error.localizedDescription)
             }
