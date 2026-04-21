@@ -70,13 +70,15 @@ final class StatusBarController: NSObject {
         popover = NSPopover()
         popover.behavior = .semitransient
         popover.animates = true
-        popover.contentSize = NSSize(width: 380, height: 520)
 
         let rootView = DropdownView()
             .environmentObject(usageStore)
-            .frame(width: 380)
+            .frame(width: 380, height: 520, alignment: .top)
 
-        popover.contentViewController = NSHostingController(rootView: rootView)
+        let host = NSHostingController(rootView: rootView)
+        host.view.frame = NSRect(x: 0, y: 0, width: 380, height: 520)
+        popover.contentViewController = host
+        popover.contentSize = NSSize(width: 380, height: 520)
     }
 
     @objc private func togglePopover(_ sender: Any?) {

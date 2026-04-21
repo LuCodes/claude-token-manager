@@ -18,8 +18,6 @@ enum AppEntry {
             .filter { $0.processIdentifier != myPID }
         for other in others { other.terminate() }
 
-        delegate.statusBar.setup()
-
         app.run()
     }
 }
@@ -27,4 +25,12 @@ enum AppEntry {
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let statusBar = StatusBarController()
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        // Setup AFTER the run loop is up so NSStatusItem's button is fully
+        // attached to the system status bar window. Calling setup() before
+        // app.run() leaves button.window nil at first popover.show(), which
+        // anchors the popover at screen origin instead of under the icon.
+        statusBar.setup()
+    }
 }
