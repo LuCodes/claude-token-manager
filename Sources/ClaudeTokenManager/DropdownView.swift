@@ -32,9 +32,13 @@ struct DropdownView: View {
 
                     // Scrollable body — overflow handled here so the footer
                     // (Refresh / Logs / Quit) never gets clipped off-screen.
+                    // Switching is driven by isAuthenticated, not by whether
+                    // any pool is non-zero: a freshly-reset week returns
+                    // pools at 0 % or null, and the user should still see the
+                    // claude.ai layout, not fall back to the local view.
                     ScrollView(.vertical, showsIndicators: false) {
                         VStack(alignment: .leading, spacing: 0) {
-                            if !store.snapshot.remoteProgressBars.isEmpty {
+                            if webSession.isAuthenticated {
                                 remoteBarsSection
                                 Spacer().frame(height: 14)
                                 localDetailSection
