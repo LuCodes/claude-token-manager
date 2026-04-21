@@ -3,6 +3,7 @@ import ClaudeTokenManagerCore
 
 struct DropdownView: View {
     @EnvironmentObject var store: UsageStore
+    @StateObject private var webSession = ClaudeWebSession.shared
     @State private var showingPreferences = false
 
     private let bg = Color(red: 31/255, green: 31/255, blue: 30/255)
@@ -32,11 +33,8 @@ struct DropdownView: View {
         header
         Spacer().frame(height: 8)
 
-        if store.claudeAIModeEnabled && store.claudeAIConnectionStatus == .connected {
+        if webSession.isAuthenticated {
             connectedStatusBadge
-            Spacer().frame(height: 10)
-        } else if store.claudeAIModeEnabled && store.claudeAIConnectionStatus == .expired {
-            expiredStatusBadge
             Spacer().frame(height: 10)
         }
 
@@ -70,17 +68,6 @@ struct DropdownView: View {
         .padding(.vertical, 4)
         .background(Color(red: 29/255, green: 158/255, blue: 117/255).opacity(0.1))
         .cornerRadius(6)
-    }
-
-    private var expiredStatusBadge: some View {
-        HStack(spacing: 4) {
-            Circle()
-                .fill(Color(red: 216/255, green: 90/255, blue: 48/255))
-                .frame(width: 6, height: 6)
-            Text("claude.ai session expired")
-                .font(AppFont.inter(size: 10))
-                .foregroundColor(Color(red: 216/255, green: 90/255, blue: 48/255))
-        }
     }
 
     // MARK: - Remote bars (claude.ai mode)
