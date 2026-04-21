@@ -70,8 +70,9 @@ final class ClaudeLoginWindowController: NSWindowController, WKNavigationDelegat
 
     private func startAuthPolling() {
         pollTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+            guard let self else { return }
             Task { @MainActor in
-                await self?.checkLoginCompletion()
+                await self.checkLoginCompletion()
             }
         }
     }
