@@ -76,32 +76,17 @@ informational — your real cost is your fixed monthly price.
   <img src="docs/screenshots/preferences.png" alt="Preferences with claude.ai sync and daily budget" width="380" />
 </p>
 
-To see real plan limits instead of local estimates, enable sync in
-Preferences. You'll need two values from claude.ai:
+To see real plan limits, open Preferences and click **Sign in to
+claude.ai**. A native login window opens — sign in normally with
+your email + password (or Google / GitHub SSO). The window closes
+automatically once you're authenticated, and the dropdown switches
+to the claude.ai layout showing your actual percentages.
 
-1. Open [claude.ai/settings/usage](https://claude.ai/settings/usage)
-   in Chrome, Brave, or Arc
-2. Open DevTools with `Cmd + Option + I`
-3. Go to the **Network** tab and reload the page
-4. Find the request named `usage`
-5. **Organization ID** — look at the Request URL:
-   `https://claude.ai/api/organizations/YOUR_ORG_ID/usage`
-6. **Session cookie** — go to the **Application** tab →
-   **Cookies** → `https://claude.ai` → find `sessionKey` and copy
-   its value (starts with `sk-ant-sid01-...`)
-
-Paste both values in Preferences and click **Test & save**. If the
-request succeeds, the dropdown switches to the claude.ai layout and
-shows your actual percentages — matching what you see at
-claude.ai/settings/usage.
-
-Credentials are stored in macOS Keychain with the
-`kSecAttrAccessibleWhenUnlockedThisDeviceOnly` attribute. They never
-leave your Mac, are never synced to iCloud, and are never included
-in Time Machine backups.
-
-See [docs/CLAUDE_AI_SYNC.md](./docs/CLAUDE_AI_SYNC.md) for the full
-setup guide with extended troubleshooting.
+Sessions are stored by WebKit in
+`~/Library/WebKit/<bundle-id>/`, isolated from Safari. They persist
+across app restarts. Click **Sign out** in Preferences to clear
+the app's session — this leaves your regular browser session
+untouched.
 
 ## Security and trust
 
@@ -112,16 +97,13 @@ what is not.
 
 - 100 % open source, all code in this repo
 - Zero third-party dependencies — only Apple frameworks (SwiftUI,
-  AppKit, Foundation, Security, UserNotifications)
-- Credentials stored in macOS Keychain, `ThisDeviceOnly` attribute
-  (excluded from iCloud and Time Machine backups)
-- Custom `SessionKey` type that cannot be logged or printed by
-  design (its `description` always returns `"SessionKey(REDACTED)"`)
-- Certificate pinning for `claude.ai` using SPKI SHA-256 hashes
-  from the Let's Encrypt E8 intermediate CA
-- Auto-logout: credentials are cleared if the app hasn't been opened
-  for 30 days
-- Clipboard is cleared after pasting the session cookie
+  AppKit, WebKit, Foundation, UserNotifications)
+- claude.ai authentication runs in a sandboxed WKWebView with a
+  per-app cookie store; credentials never touch our Swift code
+- Cookies persist on disk under `~/Library/WebKit/<bundle-id>/`,
+  isolated from Safari and other apps
+- Sign out wipes all claude.ai cookies and storage from the app's
+  WebKit data store
 
 **What's not done**
 
@@ -170,24 +152,15 @@ files, parses the events, and updates token counts and cost
 estimates. Pricing per model is stored in `Pricing.swift` and reflects
 Anthropic's published rates.
 
-**claude.ai sync mode** periodically fetches
-`https://claude.ai/api/organizations/{orgId}/usage` using the session
-cookie you provided. The response contains utilization percentages
-for each pool (session, weekly all-models, Sonnet, Opus, Claude
-Design, and others). These are rendered as progress bars matching the
-claude.ai settings page layout.
-
-TLS traffic is validated with pinned public key hashes extracted at
-build time from the current certificate chain. The app pins the
-Let's Encrypt E8 intermediate CA hash (stable) in addition to the
-leaf hash (rotates every ~90 days). If the leaf rotates while the
-intermediate remains, the app keeps working; if both rotate
-simultaneously, it falls back to standard system trust.
-
-The SPKI extraction is done with a custom ASN.1 DER parser written
-in Swift — no third-party crypto libraries, no hardcoded algorithm
-headers, and the pinning survives any future migration between RSA
-and EC keys.
+**claude.ai sync mode** runs a hidden WKWebView pointed at
+`https://claude.ai/`. Once you've signed in (in the visible login
+window), the app fires `fetch('/api/organizations/{orgId}/usage')`
+inside that WebView. WebKit takes care of cookies, TLS, CORS,
+Fetch Metadata headers, and any future provenance checks Anthropic
+may add — our Swift code only reads the JSON response. The result
+contains utilization percentages for each pool (session, weekly
+all-models, Sonnet, Opus, Claude Design, and others), rendered as
+progress bars matching the claude.ai settings page layout.
 
 ## Roadmap
 
