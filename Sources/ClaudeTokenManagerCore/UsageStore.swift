@@ -64,21 +64,7 @@ public final class UsageStore: ObservableObject {
     }
 
     @Published public private(set) var isClaudeCodeActive: Bool = false
-    private var activityInactivityTimer: Timer?
-    private let activityTimeoutSeconds: TimeInterval = 5.0
-
-    public func notifyClaudeCodeActivity() {
-        isClaudeCodeActive = true
-        activityInactivityTimer?.invalidate()
-        activityInactivityTimer = Timer.scheduledTimer(
-            withTimeInterval: activityTimeoutSeconds,
-            repeats: false
-        ) { [weak self] _ in
-            Task { @MainActor in
-                self?.isClaudeCodeActive = false
-            }
-        }
-    }
+    private var turnMonitorCancellable: AnyCancellable?
 
     // MARK: - Data sources
 
@@ -127,10 +113,22 @@ public final class UsageStore: ObservableObject {
         refresh()
         startWatching()
         startPeriodicRefresh()
+        setupTurnActivityObserver()
 
         if dailyBudgetValue != nil {
             Task { await NotificationManager.shared.requestAuthorizationIfNeeded() }
         }
+    }
+
+    private func setupTurnActivityObserver() {
+        let dirs = [ClaudeProjectsPathResolver.resolve()].compactMap { $0 }
+        TurnActivityMonitor.shared.start(watchedDirectories: dirs)
+        turnMonitorCancellable = TurnActivityMonitor.shared.$isAnyWorking
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] working in
+                self?.isClaudeCodeActive = working
+            }
     }
 
     deinit { refreshTask?.cancel() }
@@ -273,10 +271,7 @@ public final class UsageStore: ObservableObject {
         fileWatcher?.stop()
         let url = LogScanner.shared.claudeProjectsDir
         fileWatcher = FileWatcher(url: url) { [weak self] in
-            Task { @MainActor in
-                self?.notifyClaudeCodeActivity()
-                self?.refresh()
-            }
+            Task { @MainActor in self?.refresh() }
         }
         fileWatcher?.start()
     }
