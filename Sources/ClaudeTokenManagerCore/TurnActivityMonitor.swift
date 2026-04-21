@@ -172,7 +172,9 @@ public final class TurnActivityMonitor: ObservableObject {
         safetyTimer = Timer.scheduledTimer(
             withTimeInterval: 60, repeats: true
         ) { [weak self] _ in
-            Task { @MainActor in self?.runSafetyCheck() }
+            Task { @MainActor [weak self] in
+                self?.runSafetyCheck()
+            }
         }
     }
 
