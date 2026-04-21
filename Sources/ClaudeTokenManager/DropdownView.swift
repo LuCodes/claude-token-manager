@@ -16,43 +16,47 @@ struct DropdownView: View {
                     .environmentObject(store)
             } else {
                 VStack(alignment: .leading, spacing: 0) {
-                    mainContent
+                    // Top chrome — always visible
+                    VStack(alignment: .leading, spacing: 0) {
+                        header
+                        Spacer().frame(height: 8)
+                        if webSession.isAuthenticated {
+                            connectedStatusBadge
+                            Spacer().frame(height: 10)
+                        }
+                        projectMenu
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 16)
+                    .padding(.bottom, 14)
+
+                    // Scrollable body — overflow handled here so the footer
+                    // (Refresh / Logs / Quit) never gets clipped off-screen.
+                    ScrollView(.vertical, showsIndicators: false) {
+                        VStack(alignment: .leading, spacing: 0) {
+                            if !store.snapshot.remoteProgressBars.isEmpty {
+                                remoteBarsSection
+                                Spacer().frame(height: 14)
+                                localDetailSection
+                            } else {
+                                localMainLayout
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 12)
+                    }
+
+                    // Bottom chrome — always visible
+                    Divider().background(Color.white.opacity(0.08))
+                    footer
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
                 }
-                .padding(16)
                 .background(bg)
                 .foregroundColor(fg)
             }
         }
         .focusable(false)
-    }
-
-    // MARK: - Main
-
-    @ViewBuilder
-    private var mainContent: some View {
-        header
-        Spacer().frame(height: 8)
-
-        if webSession.isAuthenticated {
-            connectedStatusBadge
-            Spacer().frame(height: 10)
-        }
-
-        projectMenu
-        Spacer().frame(height: 14)
-
-        if !store.snapshot.remoteProgressBars.isEmpty {
-            remoteBarsSection
-            Spacer().frame(height: 14)
-            localDetailSection
-        } else {
-            localMainLayout
-        }
-
-        Spacer().frame(height: 12)
-        Divider().background(Color.white.opacity(0.08))
-        Spacer().frame(height: 8)
-        footer
     }
 
     private var connectedStatusBadge: some View {
