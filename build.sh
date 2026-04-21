@@ -49,14 +49,7 @@ elif [ -f "AppIcon.icns" ]; then
     cp AppIcon.icns "$APP_BUNDLE/Contents/Resources/"
 fi
 
-# Copy menu bar icon PDF into Resources
-if command -v rsvg-convert &> /dev/null && [ -f "assets/menu-bar-icon.svg" ]; then
-    rsvg-convert -f pdf "assets/menu-bar-icon.svg" -o "$APP_BUNDLE/Contents/Resources/MenuBarIcon.pdf"
-    echo "  ✓ MenuBarIcon.pdf generated from SVG"
-elif [ -f "assets/MenuBarIcon.pdf" ]; then
-    cp "assets/MenuBarIcon.pdf" "$APP_BUNDLE/Contents/Resources/"
-    echo "  ✓ MenuBarIcon.pdf copied from assets"
-fi
+# Menu bar icon is now drawn in code via BurstIconView; no PDF bundled.
 
 # Copy notification icon to bundle Resources
 NOTIF_ICON="Sources/ClaudeTokenManager/Resources/NotificationIcon.png"

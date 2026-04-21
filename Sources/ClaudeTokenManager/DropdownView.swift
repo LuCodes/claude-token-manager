@@ -247,15 +247,8 @@ struct DropdownView: View {
     private var header: some View {
         HStack {
             HStack(spacing: 8) {
-                Image(nsImage: {
-                    let img = NSImage(contentsOf: Bundle.main.url(forResource: "MenuBarIcon", withExtension: "pdf")!)!
-                    img.isTemplate = true
-                    return img
-                }())
-                    .resizable()
-                    .scaledToFit()
+                BurstIconRepresentable(tint: NSColor(fg))
                     .frame(width: 14, height: 14)
-                    .foregroundColor(fg)
                 Text("Claude Token Manager")
                     .font(AppFont.inter(size: 13, weight: .medium))
             }

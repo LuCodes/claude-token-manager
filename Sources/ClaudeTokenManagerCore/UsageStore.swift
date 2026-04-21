@@ -63,6 +63,23 @@ public final class UsageStore: ObservableObject {
         didSet { UserDefaults.standard.set(launchAtLoginEnabled, forKey: "launchAtLoginEnabled") }
     }
 
+    @Published public private(set) var isClaudeCodeActive: Bool = false
+    private var activityInactivityTimer: Timer?
+    private let activityTimeoutSeconds: TimeInterval = 5.0
+
+    public func notifyClaudeCodeActivity() {
+        isClaudeCodeActive = true
+        activityInactivityTimer?.invalidate()
+        activityInactivityTimer = Timer.scheduledTimer(
+            withTimeInterval: activityTimeoutSeconds,
+            repeats: false
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.isClaudeCodeActive = false
+            }
+        }
+    }
+
     // MARK: - Data sources
 
     private var primaryDataSource: any DataSource = LocalLogsDataSource()
@@ -256,7 +273,10 @@ public final class UsageStore: ObservableObject {
         fileWatcher?.stop()
         let url = LogScanner.shared.claudeProjectsDir
         fileWatcher = FileWatcher(url: url) { [weak self] in
-            Task { @MainActor in self?.refresh() }
+            Task { @MainActor in
+                self?.notifyClaudeCodeActivity()
+                self?.refresh()
+            }
         }
         fileWatcher?.start()
     }
