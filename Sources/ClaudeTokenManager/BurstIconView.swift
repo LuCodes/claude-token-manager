@@ -245,16 +245,12 @@ final class BurstIconView: NSView {
     // MARK: - Tint
 
     private func applyTintColor() {
-        let resolved: CGColor
-        if let tintOverride {
-            resolved = tintOverride.cgColor
-        } else {
-            var c = NSColor.labelColor.cgColor
-            effectiveAppearance.performAsCurrentDrawingAppearance {
-                c = NSColor.labelColor.cgColor
-            }
-            resolved = c
-        }
+        // In the menu bar, NSColor.labelColor resolved on a CAShapeLayer comes
+        // out as a muted gray while NSTextField next to us renders its
+        // labelColor as full white — they disagree visually. Since this view
+        // only runs in the (always dark-appearance) macOS menu bar for this
+        // app, fall back to pure white for parity with the percent label.
+        let resolved = (tintOverride ?? NSColor.white).cgColor
         crossLayer.fillColor = resolved
         diagonalLayer.fillColor = resolved
         centerLayer.fillColor = resolved
