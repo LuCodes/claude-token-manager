@@ -63,25 +63,6 @@ public final class UsageStore: ObservableObject {
         didSet { UserDefaults.standard.set(launchAtLoginEnabled, forKey: "launchAtLoginEnabled") }
     }
 
-    // MARK: - Claude.ai sync
-
-    @Published public private(set) var claudeAIModeEnabled: Bool {
-        didSet {
-            UserDefaults.standard.set(claudeAIModeEnabled, forKey: "claudeAIModeEnabled")
-            refreshDataSources()
-        }
-    }
-
-    @Published public private(set) var claudeAIConnectionStatus: ConnectionStatus = .unknown
-
-    public enum ConnectionStatus: Equatable {
-        case unknown
-        case testing
-        case connected
-        case expired
-        case error(String)
-    }
-
     // MARK: - Data sources
 
     private var primaryDataSource: any DataSource = LocalLogsDataSource()
@@ -91,6 +72,7 @@ public final class UsageStore: ObservableObject {
 
     private var refreshTask: Task<Void, Never>?
     private var fileWatcher: FileWatcher?
+    private var authCancellable: AnyCancellable?
 
     public let accentColor = Color(red: 217/255, green: 119/255, blue: 87/255)
 
@@ -110,16 +92,21 @@ public final class UsageStore: ObservableObject {
             self.launchAtLoginEnabled = UserDefaults.standard.bool(forKey: "launchAtLoginEnabled")
         }
 
-        self.claudeAIModeEnabled = UserDefaults.standard.bool(forKey: "claudeAIModeEnabled")
-
         migrateLegacyBudgetIfNeeded()
         refreshDataSources()
-        pruneStaleCredentialsIfNeeded()
 
-        // Optimistic: if credentials exist and mode is on, assume connected
-        if claudeAIModeEnabled && ClaudeAIDataSource.hasStoredCredentials() {
-            claudeAIConnectionStatus = .connected
-        }
+        // React to login / logout: switch primary source and re-fetch.
+        // @Published emits via willSet, so reading
+        // ClaudeWebSession.shared.isAuthenticated inside the sink returns the
+        // OLD value. Use the parameter (the new value) instead.
+        authCancellable = ClaudeWebSession.shared.$isAuthenticated
+            .removeDuplicates()
+            .dropFirst()
+            .sink { [weak self] newValue in
+                guard let self else { return }
+                self.applyAuthState(authenticated: newValue)
+            }
+
         refresh()
         startWatching()
         startPeriodicRefresh()
@@ -151,18 +138,6 @@ public final class UsageStore: ObservableObject {
                     self.selectedProjectId = UsageSnapshot.allProjectsId
                 }
                 self.evaluateAllNotifications()
-                // Update connection status based on actual fetch result
-                if self.claudeAIModeEnabled {
-                    if sourceId == "claude-ai" {
-                        self.claudeAIConnectionStatus = .connected
-                        UserDefaults.standard.set(
-                            Date().timeIntervalSince1970,
-                            forKey: "claudeAILastSuccessfulFetch"
-                        )
-                    } else if ClaudeAIDataSource.hasStoredCredentials() && sourceId != "claude-ai" {
-                        self.claudeAIConnectionStatus = .expired
-                    }
-                }
             }
         }
     }
@@ -221,77 +196,16 @@ public final class UsageStore: ObservableObject {
     // MARK: - Data source management
 
     private func refreshDataSources() {
-        if claudeAIModeEnabled && ClaudeAIDataSource.hasStoredCredentials() {
+        applyAuthState(authenticated: ClaudeWebSession.shared.isAuthenticated)
+    }
+
+    private func applyAuthState(authenticated: Bool) {
+        if authenticated {
             primaryDataSource = ClaudeAIDataSource()
         } else {
             primaryDataSource = LocalLogsDataSource()
         }
-    }
-
-    public func setClaudeAIMode(enabled: Bool) {
-        claudeAIModeEnabled = enabled
         refresh()
-    }
-
-    public func testAndSaveClaudeAICredentials(
-        orgId: String,
-        sessionKey: String
-    ) async {
-        await MainActor.run { self.claudeAIConnectionStatus = .testing }
-        do {
-            // Probe the API with the candidate credentials BEFORE writing anything
-            // to Keychain — a failed probe must not destroy previously valid creds.
-            _ = try await ClaudeAPIClient.shared.fetchUsageReport(
-                organizationId: orgId,
-                sessionKey: SessionKey(sessionKey)
-            )
-            try ClaudeAIDataSource.saveCredentials(orgId: orgId, sessionKey: sessionKey)
-            await MainActor.run {
-                self.claudeAIConnectionStatus = .connected
-                self.refreshDataSources()
-                self.refresh()
-            }
-        } catch let err as DataSourceError {
-            let isAuth: Bool
-            switch err {
-            case .authenticationExpired, .authenticationRequired: isAuth = true
-            default: isAuth = false
-            }
-            await MainActor.run {
-                self.claudeAIConnectionStatus = isAuth
-                    ? .expired
-                    : .error("Connection failed")
-            }
-        } catch {
-            await MainActor.run {
-                self.claudeAIConnectionStatus = .error(error.localizedDescription)
-            }
-        }
-    }
-
-    public func clearClaudeAICredentials() {
-        ClaudeAIDataSource.clearCredentials()
-        claudeAIConnectionStatus = .unknown
-        refreshDataSources()
-    }
-
-    public func pruneStaleCredentialsIfNeeded() {
-        let key = "claudeAILastSuccessfulFetch"
-        let now = Date()
-        let cutoff: TimeInterval = 30 * 24 * 3600
-
-        guard ClaudeAIDataSource.hasStoredCredentials() else { return }
-
-        let lastFetch = UserDefaults.standard.double(forKey: key)
-        guard lastFetch > 0 else {
-            UserDefaults.standard.set(now.timeIntervalSince1970, forKey: key)
-            return
-        }
-
-        if now.timeIntervalSince1970 - lastFetch > cutoff {
-            clearClaudeAICredentials()
-            NSLog("Claude Token Manager: auto-cleared stale claude.ai credentials after 30 days of inactivity")
-        }
     }
 
     // MARK: - Notifications
