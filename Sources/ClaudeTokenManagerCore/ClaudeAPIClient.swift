@@ -58,10 +58,16 @@ public final class ClaudeAPIClient: @unchecked Sendable {
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.setValue("*/*", forHTTPHeaderField: "accept")
+        request.setValue("en-US,en;q=0.9", forHTTPHeaderField: "accept-language")
         request.setValue("web_claude_ai", forHTTPHeaderField: "anthropic-client-platform")
         request.setValue("1.0.0", forHTTPHeaderField: "anthropic-client-version")
         request.setValue("application/json", forHTTPHeaderField: "content-type")
+        request.setValue("https://claude.ai", forHTTPHeaderField: "origin")
         request.setValue("https://claude.ai/settings/usage", forHTTPHeaderField: "referer")
+        // Fetch Metadata headers — required since 2026-04 to bypass Anthropic 403
+        request.setValue("empty", forHTTPHeaderField: "sec-fetch-dest")
+        request.setValue("cors", forHTTPHeaderField: "sec-fetch-mode")
+        request.setValue("same-origin", forHTTPHeaderField: "sec-fetch-site")
         request.setValue(
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
             forHTTPHeaderField: "user-agent"
