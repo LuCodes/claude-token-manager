@@ -71,6 +71,12 @@ public final class UsageStore: ObservableObject {
     private var primaryDataSource: any DataSource = LocalLogsDataSource()
     private let fallbackDataSource: any DataSource = LocalLogsDataSource()
 
+    /// In-memory only: last claude.ai snapshot that decoded successfully.
+    /// Used when a subsequent fetch fails (offline, transient API error)
+    /// while the user is still authenticated, so the dropdown bars don't
+    /// vanish. Cleared on logout; not persisted across launches.
+    private var lastKnownClaudeAISnapshot: UsageSnapshot? = nil
+
     @Published public private(set) var activeSourceId: String = "local-logs"
 
     private var refreshTask: Task<Void, Never>?
@@ -139,14 +145,18 @@ public final class UsageStore: ObservableObject {
         refreshAvailableProjects()
         let primary = primaryDataSource
         let fallback = fallbackDataSource
+        let cache = lastKnownClaudeAISnapshot
         Task.detached(priority: .userInitiated) {
-            let (newSnapshot, sourceId) = await Self.fetchWithFallback(
-                primary: primary, fallback: fallback
+            let result = await Self.fetchWithFallback(
+                primary: primary, fallback: fallback, cache: cache
             )
             await MainActor.run { [weak self] in
                 guard let self else { return }
-                self.snapshot = newSnapshot
-                self.activeSourceId = sourceId
+                if result.isFreshPrimary, result.sourceId == "claude-ai" {
+                    self.lastKnownClaudeAISnapshot = result.snapshot
+                }
+                self.snapshot = result.snapshot
+                self.activeSourceId = result.sourceId
                 self.isLoading = false
                 if self.selectedProjectId != UsageSnapshot.allProjectsId,
                    !self.availableProjects.contains(where: { $0.rawName == self.selectedProjectId }) {
@@ -158,25 +168,33 @@ public final class UsageStore: ObservableObject {
     }
 
     private static func fetchWithFallback(
-        primary: any DataSource, fallback: any DataSource
-    ) async -> (UsageSnapshot, String) {
+        primary: any DataSource, fallback: any DataSource, cache: UsageSnapshot?
+    ) async -> (snapshot: UsageSnapshot, sourceId: String, isFreshPrimary: Bool) {
         do {
             let snapshot = try await primary.fetch()
-            return (snapshot, primary.id)
+            return (snapshot, primary.id, true)
         } catch {
             NSLog("Primary data source failed: \(error.localizedDescription)")
+        }
+
+        // claude.ai is the only primary that can fail transiently (offline,
+        // 5xx). Serve the last known good snapshot rather than collapsing
+        // to local-only mode while the user is still authenticated.
+        if primary.id == "claude-ai", let cache {
+            NSLog("Serving cached claude.ai snapshot (last known good)")
+            return (cache, primary.id, false)
         }
 
         if primary.id != fallback.id {
             do {
                 let snapshot = try await fallback.fetch()
-                return (snapshot, fallback.id)
+                return (snapshot, fallback.id, false)
             } catch {
                 NSLog("Fallback data source also failed: \(error.localizedDescription)")
             }
         }
 
-        return (UsageSnapshot(), "none")
+        return (UsageSnapshot(), "none", false)
     }
 
     // MARK: - Available projects (always from local filesystem)
@@ -219,6 +237,7 @@ public final class UsageStore: ObservableObject {
             primaryDataSource = ClaudeAIDataSource()
         } else {
             primaryDataSource = LocalLogsDataSource()
+            lastKnownClaudeAISnapshot = nil
         }
         refresh()
     }
