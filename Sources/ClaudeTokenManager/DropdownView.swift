@@ -122,11 +122,9 @@ struct DropdownView: View {
                     .foregroundColor(bar.percent >= 80 ? color : .white.opacity(0.85))
                     .monospacedDigit()
             }
-            if let reset = bar.resetsAt {
-                Text(resetLabel(for: reset))
-                    .font(AppFont.inter(size: 10))
-                    .foregroundColor(.white.opacity(0.4))
-            }
+            Text(bar.resetsAt.map(resetLabel) ?? "\u{2014}")
+                .font(AppFont.inter(size: 10))
+                .foregroundColor(.white.opacity(0.4))
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     RoundedRectangle(cornerRadius: 999)
