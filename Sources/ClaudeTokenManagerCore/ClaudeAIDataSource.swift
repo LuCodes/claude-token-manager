@@ -34,8 +34,10 @@ public final class ClaudeAIDataSource: DataSource, @unchecked Sendable {
         var snapshot = UsageSnapshot()
 
         if let pool = raw.fiveHour {
-            snapshot.sessionEnd = pool.resetsAt
-            snapshot.sessionStart = pool.resetsAt.addingTimeInterval(-5 * 3600)
+            if let resetsAt = pool.resetsAt {
+                snapshot.sessionEnd = resetsAt
+                snapshot.sessionStart = resetsAt.addingTimeInterval(-5 * 3600)
+            }
             snapshot.sessionTokens = Int(pool.utilization * 100_000)
             snapshot.sessionCost = pool.utilization
         }

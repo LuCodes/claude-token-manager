@@ -290,12 +290,12 @@ public struct RawUsageReport: Codable, Sendable {
 
     public struct Pool: Codable, Sendable {
         public let utilization: Double
-        public let resetsAt: Date
+        public let resetsAt: Date?
         enum CodingKeys: String, CodingKey {
             case utilization
             case resetsAt = "resets_at"
         }
-        public init(utilization: Double, resetsAt: Date) {
+        public init(utilization: Double, resetsAt: Date?) {
             self.utilization = utilization
             self.resetsAt = resetsAt
         }
