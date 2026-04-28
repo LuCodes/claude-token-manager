@@ -5,11 +5,46 @@ public struct DailyBucket: Codable, Identifiable, Equatable, Sendable {
     public let date: String         // ISO yyyy-MM-dd
     public var totalTokens: Int
     public var totalCostUSD: Double
+    public var inputTokens: Int
+    public var outputTokens: Int
+    public var cacheCreationTokens: Int
+    public var cacheReadTokens: Int
 
-    public init(date: String, totalTokens: Int, totalCostUSD: Double) {
+    public init(
+        date: String,
+        totalTokens: Int,
+        totalCostUSD: Double,
+        inputTokens: Int = 0,
+        outputTokens: Int = 0,
+        cacheCreationTokens: Int = 0,
+        cacheReadTokens: Int = 0
+    ) {
         self.date = date
         self.totalTokens = totalTokens
         self.totalCostUSD = totalCostUSD
+        self.inputTokens = inputTokens
+        self.outputTokens = outputTokens
+        self.cacheCreationTokens = cacheCreationTokens
+        self.cacheReadTokens = cacheReadTokens
+    }
+
+    // Backward-compat: v1 buckets persisted in UserDefaults don't have the
+    // breakdown fields. Default them to 0 so old data still decodes; the
+    // next ingest replaces these days with full breakdown anyway.
+    private enum CodingKeys: String, CodingKey {
+        case date, totalTokens, totalCostUSD
+        case inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.date = try c.decode(String.self, forKey: .date)
+        self.totalTokens = try c.decode(Int.self, forKey: .totalTokens)
+        self.totalCostUSD = try c.decode(Double.self, forKey: .totalCostUSD)
+        self.inputTokens = try c.decodeIfPresent(Int.self, forKey: .inputTokens) ?? 0
+        self.outputTokens = try c.decodeIfPresent(Int.self, forKey: .outputTokens) ?? 0
+        self.cacheCreationTokens = try c.decodeIfPresent(Int.self, forKey: .cacheCreationTokens) ?? 0
+        self.cacheReadTokens = try c.decodeIfPresent(Int.self, forKey: .cacheReadTokens) ?? 0
     }
 }
 
@@ -18,11 +53,27 @@ public struct HourlyBucket: Identifiable, Equatable, Sendable {
     public let hour: Int            // 0-23
     public var totalTokens: Int
     public var totalCostUSD: Double
+    public var inputTokens: Int
+    public var outputTokens: Int
+    public var cacheCreationTokens: Int
+    public var cacheReadTokens: Int
 
-    public init(hour: Int, totalTokens: Int, totalCostUSD: Double) {
+    public init(
+        hour: Int,
+        totalTokens: Int,
+        totalCostUSD: Double,
+        inputTokens: Int = 0,
+        outputTokens: Int = 0,
+        cacheCreationTokens: Int = 0,
+        cacheReadTokens: Int = 0
+    ) {
         self.hour = hour
         self.totalTokens = totalTokens
         self.totalCostUSD = totalCostUSD
+        self.inputTokens = inputTokens
+        self.outputTokens = outputTokens
+        self.cacheCreationTokens = cacheCreationTokens
+        self.cacheReadTokens = cacheReadTokens
     }
 }
 
@@ -62,6 +113,10 @@ public final class HistoryAggregator: ObservableObject {
                 ?? DailyBucket(date: key, totalTokens: 0, totalCostUSD: 0)
             bucket.totalTokens += e.totalTokens
             bucket.totalCostUSD += e.exactCost
+            bucket.inputTokens += e.inputTokens
+            bucket.outputTokens += e.outputTokens
+            bucket.cacheCreationTokens += e.cacheCreationTokens
+            bucket.cacheReadTokens += e.cacheReadTokens
             freshDaily[key] = bucket
         }
 
@@ -96,6 +151,10 @@ public final class HistoryAggregator: ObservableObject {
             guard h >= 0 && h < 24 else { continue }
             buckets[h].totalTokens += e.totalTokens
             buckets[h].totalCostUSD += e.exactCost
+            buckets[h].inputTokens += e.inputTokens
+            buckets[h].outputTokens += e.outputTokens
+            buckets[h].cacheCreationTokens += e.cacheCreationTokens
+            buckets[h].cacheReadTokens += e.cacheReadTokens
         }
         return buckets
     }
