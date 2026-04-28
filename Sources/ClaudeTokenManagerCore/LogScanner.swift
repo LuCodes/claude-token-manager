@@ -121,6 +121,7 @@ public final class LogScanner: @unchecked Sendable {
             .sorted { $0.lastActivity > $1.lastActivity }
 
         snapshot.recentActivityDates = activityDates
+        snapshot.historyEvents = activityEvents
         snapshot.weekByModel = weekByModel
 
         if let session = LimitCalculator.currentSessionWindow(activityDates: activityDates, now: now),
@@ -205,13 +206,16 @@ public final class LogScanner: @unchecked Sendable {
             sessionTokens += total
             sessionMessages += 1
 
+            // History needs every event ever recorded; the active-session
+            // calculation slices by a 5h window downstream.
+            activityEvents.append(ActivityEvent(
+                date: date, model: model,
+                inputTokens: input, outputTokens: output,
+                cacheCreationTokens: cacheWrite, cacheReadTokens: cacheRead
+            ))
+
             if date >= twentyFourHoursAgo {
                 activityDates.append(date)
-                activityEvents.append(ActivityEvent(
-                    date: date, model: model,
-                    inputTokens: input, outputTokens: output,
-                    cacheCreationTokens: cacheWrite, cacheReadTokens: cacheRead
-                ))
             }
 
             if date >= startOfToday {

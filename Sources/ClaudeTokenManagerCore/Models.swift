@@ -161,6 +161,12 @@ public struct UsageSnapshot {
 
     public var recentActivityDates: [Date] = []
 
+    /// Per-line activity events. Populated only by the local LogScanner;
+    /// claude.ai snapshots leave it empty. Consumed by HistoryAggregator
+    /// so the History window can compute hourly/daily aggregates without
+    /// re-reading every JSONL.
+    public var historyEvents: [ActivityEvent] = []
+
     /// Weekly totals across all projects (Monday 09:00 -> next Monday 09:00).
     public var weekByModel: [String: ModelUsage] = [:]
 
