@@ -165,6 +165,16 @@ public final class UsageStore: ObservableObject {
             let result = await Self.fetchWithFallback(
                 primary: primary, fallback: fallback, cache: cache
             )
+            // History always reads from local logs. If the chosen path
+            // already produced events (LocalLogsDataSource) reuse them;
+            // otherwise (claude.ai mode, or cache served while offline)
+            // do a separate scan so the History window stays current.
+            let historyEvents: [ActivityEvent]
+            if !result.snapshot.historyEvents.isEmpty {
+                historyEvents = result.snapshot.historyEvents
+            } else {
+                historyEvents = LogScanner.shared.scan().historyEvents
+            }
             await MainActor.run { [weak self] in
                 guard let self else { return }
                 self.applySyncStatusTransition(result: result, primaryId: primary.id)
@@ -175,6 +185,7 @@ public final class UsageStore: ObservableObject {
                    !self.availableProjects.contains(where: { $0.rawName == self.selectedProjectId }) {
                     self.selectedProjectId = UsageSnapshot.allProjectsId
                 }
+                HistoryAggregator.shared.ingest(events: historyEvents)
                 self.evaluateAllNotifications()
             }
         }
