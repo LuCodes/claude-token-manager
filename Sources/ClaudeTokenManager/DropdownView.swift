@@ -5,9 +5,13 @@ struct DropdownView: View {
     @EnvironmentObject var store: UsageStore
     @StateObject private var webSession = ClaudeWebSession.shared
     @State private var showingPreferences = false
+    @State private var staleTick: Int = 0
 
     private let bg = Color(red: 31/255, green: 31/255, blue: 30/255)
     private let fg = Color(red: 241/255, green: 239/255, blue: 232/255)
+    private let liveColor = Color(red: 29/255, green: 158/255, blue: 117/255)
+    private let staleColor = Color(red: 239/255, green: 159/255, blue: 39/255)
+    private let staleTickPublisher = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
 
     var body: some View {
         Group {
@@ -61,21 +65,59 @@ struct DropdownView: View {
             }
         }
         .focusable(false)
+        .onReceive(staleTickPublisher) { _ in
+            if case .stale = store.claudeAISyncStatus {
+                staleTick &+= 1
+            }
+        }
     }
 
+    @ViewBuilder
     private var connectedStatusBadge: some View {
-        HStack(spacing: 4) {
-            Circle()
-                .fill(Color(red: 29/255, green: 158/255, blue: 117/255))
-                .frame(width: 6, height: 6)
-            Text("Live data from claude.ai")
-                .font(AppFont.inter(size: 10))
-                .foregroundColor(.white.opacity(0.6))
+        switch store.claudeAISyncStatus {
+        case .live:
+            badgeShell(tint: liveColor) {
+                Circle().fill(liveColor).frame(width: 6, height: 6)
+                Text("Live data from claude.ai")
+                    .font(AppFont.inter(size: 10))
+                    .foregroundColor(.white.opacity(0.7))
+            }
+        case .stale(let since):
+            badgeShell(tint: staleColor) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 9))
+                    .foregroundColor(staleColor)
+                Text("Sync unavailable · \(staleDuration(since: since))")
+                    .font(AppFont.inter(size: 10))
+                    .foregroundColor(staleColor)
+            }
+        case .neverFetched:
+            badgeShell(tint: liveColor) {
+                Circle().fill(liveColor.opacity(0.5)).frame(width: 6, height: 6)
+                Text("Connecting to claude.ai\u{2026}")
+                    .font(AppFont.inter(size: 10))
+                    .foregroundColor(.white.opacity(0.5))
+            }
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .background(Color(red: 29/255, green: 158/255, blue: 117/255).opacity(0.1))
-        .cornerRadius(6)
+    }
+
+    private func badgeShell<Content: View>(
+        tint: Color,
+        @ViewBuilder _ content: () -> Content
+    ) -> some View {
+        HStack(spacing: 4) { content() }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(tint.opacity(0.1))
+            .cornerRadius(6)
+    }
+
+    private func staleDuration(since: Date) -> String {
+        _ = staleTick // re-evaluate when the timer ticks
+        let elapsed = Int(-since.timeIntervalSinceNow)
+        if elapsed < 60 { return "just now" }
+        if elapsed < 3600 { return "\(elapsed / 60) min ago" }
+        return "\(elapsed / 3600)h ago"
     }
 
     // MARK: - Remote bars (claude.ai mode)
