@@ -5,6 +5,7 @@ struct DropdownView: View {
     @EnvironmentObject var store: UsageStore
     @StateObject private var webSession = ClaudeWebSession.shared
     @State private var showingPreferences = false
+    @State private var showingHistory = false
     @State private var staleTick: Int = 0
 
     private let bg = Color(red: 31/255, green: 31/255, blue: 30/255)
@@ -17,6 +18,9 @@ struct DropdownView: View {
         Group {
             if showingPreferences {
                 PreferencesView(onClose: { showingPreferences = false })
+                    .environmentObject(store)
+            } else if showingHistory {
+                HistoryView(onClose: { showingHistory = false })
                     .environmentObject(store)
             } else {
                 VStack(alignment: .leading, spacing: 0) {
@@ -529,6 +533,13 @@ struct DropdownView: View {
                 HStack(spacing: 4) {
                     Image(systemName: "folder").font(.system(size: 10))
                     Text("Logs").font(AppFont.inter(size: 11))
+                }.foregroundColor(.white.opacity(0.6))
+            }.buttonStyle(.plain)
+
+            Button(action: { showingHistory = true }) {
+                HStack(spacing: 4) {
+                    Image(systemName: "chart.line.uptrend.xyaxis").font(.system(size: 10))
+                    Text("History").font(AppFont.inter(size: 11))
                 }.foregroundColor(.white.opacity(0.6))
             }.buttonStyle(.plain)
 
