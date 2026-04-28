@@ -2,6 +2,15 @@ import Foundation
 import SwiftUI
 import Combine
 
+/// Visible state of the claude.ai live sync. `since` on `.stale` marks
+/// the moment the current outage was first detected — kept stable across
+/// consecutive failures so the badge can render "X min ago" honestly.
+public enum SyncStatus: Equatable, Sendable {
+    case neverFetched
+    case live
+    case stale(since: Date)
+}
+
 public struct ProjectDisplayInfo: Hashable, Identifiable {
     public let rawName: String
     public let displayName: String
@@ -76,6 +85,12 @@ public final class UsageStore: ObservableObject {
     /// while the user is still authenticated, so the dropdown bars don't
     /// vanish. Cleared on logout; not persisted across launches.
     private var lastKnownClaudeAISnapshot: UsageSnapshot? = nil
+
+    @Published public private(set) var claudeAISyncStatus: SyncStatus = .neverFetched
+
+    private var consecutiveFailures: Int = 0
+    private let failuresBeforeNotification = 3
+    private var notificationSentForCurrentIncident = false
 
     @Published public private(set) var activeSourceId: String = "local-logs"
 
@@ -152,9 +167,7 @@ public final class UsageStore: ObservableObject {
             )
             await MainActor.run { [weak self] in
                 guard let self else { return }
-                if result.isFreshPrimary, result.sourceId == "claude-ai" {
-                    self.lastKnownClaudeAISnapshot = result.snapshot
-                }
+                self.applySyncStatusTransition(result: result, primaryId: primary.id)
                 self.snapshot = result.snapshot
                 self.activeSourceId = result.sourceId
                 self.isLoading = false
@@ -163,6 +176,46 @@ public final class UsageStore: ObservableObject {
                     self.selectedProjectId = UsageSnapshot.allProjectsId
                 }
                 self.evaluateAllNotifications()
+            }
+        }
+    }
+
+    /// Drives `claudeAISyncStatus` and the failure counter that gates the
+    /// "sync unavailable" notification. Only acts when claude.ai was the
+    /// primary source — local-only mode (logged out) has no concept of
+    /// live-vs-stale, so we leave the status alone in that branch.
+    private func applySyncStatusTransition(
+        result: (snapshot: UsageSnapshot, sourceId: String, isFreshPrimary: Bool),
+        primaryId: String
+    ) {
+        guard primaryId == "claude-ai" else { return }
+
+        if result.isFreshPrimary {
+            lastKnownClaudeAISnapshot = result.snapshot
+            consecutiveFailures = 0
+            notificationSentForCurrentIncident = false
+            claudeAISyncStatus = .live
+            SyncNotificationManager.shared.cancelSyncUnavailableNotification()
+            return
+        }
+
+        // claude.ai fetch failed. Preserve the original outage start time
+        // across consecutive failures so the badge keeps counting up.
+        let staleSince: Date
+        if case .stale(let existing) = claudeAISyncStatus {
+            staleSince = existing
+        } else {
+            staleSince = Date()
+        }
+        claudeAISyncStatus = .stale(since: staleSince)
+        consecutiveFailures += 1
+
+        if consecutiveFailures >= failuresBeforeNotification,
+           !notificationSentForCurrentIncident {
+            notificationSentForCurrentIncident = true
+            Task {
+                await SyncNotificationManager.shared
+                    .sendSyncUnavailableNotification(since: staleSince)
             }
         }
     }
@@ -238,6 +291,10 @@ public final class UsageStore: ObservableObject {
         } else {
             primaryDataSource = LocalLogsDataSource()
             lastKnownClaudeAISnapshot = nil
+            claudeAISyncStatus = .neverFetched
+            consecutiveFailures = 0
+            notificationSentForCurrentIncident = false
+            SyncNotificationManager.shared.cancelSyncUnavailableNotification()
         }
         refresh()
     }
