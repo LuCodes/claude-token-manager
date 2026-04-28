@@ -7,6 +7,7 @@ struct HistoryView: View {
     @EnvironmentObject var store: UsageStore
     @StateObject private var aggregator = HistoryAggregator.shared
     @State private var period: Period = .sevenDays
+    @State private var isBreakdownExpanded: Bool = false
     var onClose: (() -> Void)?
 
     enum Period: String, CaseIterable, Identifiable {
@@ -124,6 +125,7 @@ struct HistoryView: View {
                 .foregroundColor(.white.opacity(0.5))
 
             metricsRow
+            breakdownDisclosure
             chartSection
         }
     }
@@ -231,6 +233,116 @@ struct HistoryView: View {
         .padding(10)
         .background(cardBg)
         .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+
+    // MARK: - Token breakdown (collapsible)
+
+    private struct TokenBreakdown {
+        let input: Int
+        let output: Int
+        let cacheCreation: Int
+        let cacheRead: Int
+        var total: Int { input + output + cacheCreation + cacheRead }
+    }
+
+    private var periodBreakdown: TokenBreakdown {
+        switch period {
+        case .oneDay:
+            let buckets = aggregator.hourlyTodayBuckets
+            return TokenBreakdown(
+                input:         buckets.reduce(0) { $0 + $1.inputTokens },
+                output:        buckets.reduce(0) { $0 + $1.outputTokens },
+                cacheCreation: buckets.reduce(0) { $0 + $1.cacheCreationTokens },
+                cacheRead:     buckets.reduce(0) { $0 + $1.cacheReadTokens }
+            )
+        case .sevenDays:
+            return breakdown(from: aggregator.recentDailyHistory(days: 7))
+        case .thirtyDays:
+            return breakdown(from: aggregator.recentDailyHistory(days: 30))
+        }
+    }
+
+    private func breakdown(from buckets: [DailyBucket]) -> TokenBreakdown {
+        TokenBreakdown(
+            input:         buckets.reduce(0) { $0 + $1.inputTokens },
+            output:        buckets.reduce(0) { $0 + $1.outputTokens },
+            cacheCreation: buckets.reduce(0) { $0 + $1.cacheCreationTokens },
+            cacheRead:     buckets.reduce(0) { $0 + $1.cacheReadTokens }
+        )
+    }
+
+    private var breakdownDisclosure: some View {
+        let bd = periodBreakdown
+        let total = bd.total
+        return VStack(alignment: .leading, spacing: 0) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.18)) {
+                    isBreakdownExpanded.toggle()
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundColor(.white.opacity(0.55))
+                        .rotationEffect(.degrees(isBreakdownExpanded ? 90 : 0))
+                    Text("Token breakdown")
+                        .font(AppFont.inter(size: 11, weight: .medium))
+                        .foregroundColor(.white.opacity(0.7))
+                    Spacer()
+                }
+                .contentShape(Rectangle())
+                .padding(.vertical, 4)
+            }
+            .buttonStyle(.plain)
+
+            if isBreakdownExpanded {
+                VStack(spacing: 4) {
+                    breakdownRow(label: "Input",          value: bd.input,         total: total)
+                    breakdownRow(label: "Output",         value: bd.output,        total: total)
+                    breakdownRow(label: "Cache creation", value: bd.cacheCreation, total: total)
+                    breakdownRow(label: "Cache read",     value: bd.cacheRead,     total: total)
+                }
+                .padding(10)
+                .background(cardBg)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .padding(.top, 4)
+            }
+        }
+    }
+
+    private func breakdownRow(label: String, value: Int, total: Int) -> some View {
+        HStack(spacing: 8) {
+            Text(label)
+                .font(AppFont.inter(size: 11))
+                .foregroundColor(.white.opacity(0.6))
+            Spacer()
+            Text(formatTokensAbsolute(value))
+                .font(AppFont.inter(size: 11, weight: .medium))
+                .foregroundColor(.white.opacity(0.85))
+                .monospacedDigit()
+            Text(formatPercent(value: value, total: total))
+                .font(AppFont.inter(size: 11))
+                .foregroundColor(.white.opacity(0.4))
+                .monospacedDigit()
+                .frame(width: 52, alignment: .trailing)
+        }
+    }
+
+    private func formatTokensAbsolute(_ n: Int) -> String {
+        let m = Double(n) / 1_000_000
+        if m >= 1000 { return String(format: "%.2fB", m / 1000) }
+        if m >= 1    { return String(format: "%.2fM", m) }
+        if m >= 0.001 { return String(format: "%.0fK", m * 1000) }
+        return "\(n)"
+    }
+
+    private func formatPercent(value: Int, total: Int) -> String {
+        guard total > 0 else { return "—" }
+        let pct = Double(value) / Double(total) * 100
+        if pct >= 10 { return String(format: "%.0f%%", pct) }
+        if pct >= 0.1 { return String(format: "%.1f%%", pct) }
+        if pct > 0 { return String(format: "%.2f%%", pct) }
+        return "0%"
     }
 
     // MARK: - Chart
