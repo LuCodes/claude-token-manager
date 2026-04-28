@@ -1,4 +1,5 @@
 import AppKit
+import ClaudeTokenManagerCore
 
 /// Pure AppKit entry point — no SwiftUI App, no phantom Settings window.
 @main
@@ -32,5 +33,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // app.run() leaves button.window nil at first popover.show(), which
         // anchors the popover at screen origin instead of under the icon.
         statusBar.setup()
+
+        // Ask once for notification permission so the "sync unavailable"
+        // alert can fire after 3 consecutive fetch failures. No-op if the
+        // user has already granted or denied.
+        Task {
+            await SyncNotificationManager.shared.requestAuthorization()
+        }
     }
 }
