@@ -12,13 +12,11 @@ final class StatusBarController: NSObject {
     private var activityCancellable: AnyCancellable?
     private var globalMonitor: Any?
 
-    private var statusItemContainer: StatusItemContainerView?
-    private var burstIcon: BurstIconView?
-    private var percentLabel: NSTextField?
+    /// Tracked separately from button.title so we can re-render when the
+    /// active state changes without recomputing the label string.
+    private var currentLabel: String = ""
 
     private let iconSize: CGFloat = 18
-    private let horizontalPadding: CGFloat = 6
-    private let iconLabelSpacing: CGFloat = 4
 
     let usageStore = UsageStore()
 
@@ -28,108 +26,64 @@ final class StatusBarController: NSObject {
         setupGlobalClickOutside()
         observeStoreChanges()
         observeActivity()
-        observeAccessibility()
     }
 
     deinit {
         if let globalMonitor {
             NSEvent.removeMonitor(globalMonitor)
         }
-        NSWorkspace.shared.notificationCenter.removeObserver(self)
     }
 
     // MARK: - Status Item
+    //
+    // Earlier versions placed a custom layer-backed NSView (StatusItemContainerView
+    // hosting BurstIconView + an NSTextField) inside the status item button.
+    // On macOS 26 that triggers ~30 Hz redraws of the status item — each one
+    // regenerates a Gaussian-blurred shadow image via vImage convolution —
+    // which kept ~one CPU core busy whenever the app was running, even with
+    // no animation, no refresh, no activity monitor. Switching to the native
+    // `button.image` + `button.title` API drops the steady-state CPU to ~0%.
 
     private func setupStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
-        let containerHeight = NSStatusBar.system.thickness
-        let initialWidth: CGFloat = horizontalPadding * 2 + iconSize + iconLabelSpacing + 30
+        guard let button = statusItem.button else { return }
+        button.image = BurstIconView.renderTemplateImage(
+            size: NSSize(width: iconSize, height: iconSize)
+        )
+        button.imagePosition = .imageLeft
+        button.imageHugsTitle = true
+        button.target = self
+        button.action = #selector(buttonClicked(_:))
+        button.sendAction(on: [.leftMouseUp, .rightMouseUp])
 
-        let container = StatusItemContainerView(frame: NSRect(
-            x: 0, y: 0, width: initialWidth, height: containerHeight
-        ))
-        container.wantsLayer = true
+        renderTitle()
+    }
 
-        let icon = BurstIconView(frame: NSRect(
-            x: horizontalPadding,
-            y: (containerHeight - iconSize) / 2,
-            width: iconSize,
-            height: iconSize
-        ))
-        icon.autoresizingMask = []
-        container.addSubview(icon)
-        self.burstIcon = icon
-
-        let label = NSTextField(labelWithString: "–")
-        label.font = NSFont.menuBarFont(ofSize: 0)
-        label.textColor = .labelColor
-        label.backgroundColor = .clear
-        label.drawsBackground = false
-        label.isBezeled = false
-        label.isEditable = false
-        label.isSelectable = false
-        label.alignment = .left
-        container.addSubview(label)
-        self.percentLabel = label
-
-        self.statusItemContainer = container
-        statusItem.length = initialWidth
-        statusItem.button?.subviews.forEach { $0.removeFromSuperview() }
-
-        if let button = statusItem.button {
-            button.image = nil
-            button.title = ""
-            button.addSubview(container)
-            container.frame = button.bounds
-            container.autoresizingMask = [.width, .height]
-            button.target = self
-            button.action = #selector(buttonClicked(_:))
-            button.sendAction(on: [.leftMouseUp, .rightMouseUp])
+    private func computeLabelText() -> String {
+        if let session = usageStore.snapshot.remoteProgressBars.first(where: { $0.id == "session" }) {
+            return "\(Int(session.clampedPercent.rounded(.down)))%"
         }
+        return usageStore.compactLabel
+    }
 
-        updateLabel()
+    /// Compose the title string and assign it to the status item button.
+    /// The active indicator is a leading bullet inserted only on state
+    /// transitions, so no re-render happens during a typical refresh.
+    private func renderTitle() {
+        guard let button = statusItem.button else { return }
+
+        let prefix = usageStore.isClaudeCodeActive ? "• " : ""
+        let next = prefix + currentLabel
+        guard button.title != next else { return }
+        button.title = next
     }
 
     private func updateLabel() {
-        guard let label = percentLabel else { return }
-
-        let text: String
-        if let session = usageStore.snapshot.remoteProgressBars.first(where: { $0.id == "session" }) {
-            text = "\(Int(session.clampedPercent.rounded(.down)))%"
-        } else {
-            text = usageStore.compactLabel
-        }
-
-        label.stringValue = text
-        layoutContainerContents()
-    }
-
-    private func layoutContainerContents() {
-        guard let container = statusItemContainer,
-              let label = percentLabel,
-              let icon = burstIcon else { return }
-
-        label.sizeToFit()
-        let labelWidth = ceil(label.bounds.width)
-        let totalWidth = horizontalPadding + iconSize + iconLabelSpacing + labelWidth + horizontalPadding
-        let height = container.frame.height
-
-        statusItem.length = totalWidth
-        container.frame = NSRect(x: 0, y: 0, width: totalWidth, height: height)
-
-        icon.frame = NSRect(
-            x: horizontalPadding,
-            y: (height - iconSize) / 2,
-            width: iconSize,
-            height: iconSize
-        )
-        label.frame = NSRect(
-            x: horizontalPadding + iconSize + iconLabelSpacing,
-            y: (height - label.bounds.height) / 2,
-            width: labelWidth,
-            height: label.bounds.height
-        )
+        let text = computeLabelText()
+        guard text != currentLabel else { return }
+        currentLabel = text
+        renderTitle()
     }
 
     private func observeStoreChanges() {
@@ -138,39 +92,13 @@ final class StatusBarController: NSObject {
         }
     }
 
-    // MARK: - Activity animation
-
     private func observeActivity() {
         activityCancellable = usageStore.$isClaudeCodeActive
             .removeDuplicates()
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] isActive in
-                if isActive {
-                    self?.burstIcon?.startBreathingAnimation()
-                } else {
-                    self?.burstIcon?.stopBreathingAnimation()
-                }
+            .sink { [weak self] _ in
+                self?.renderTitle()
             }
-    }
-
-    private func observeAccessibility() {
-        NSWorkspace.shared.notificationCenter.addObserver(
-            self,
-            selector: #selector(accessibilityDidChange),
-            name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification,
-            object: nil
-        )
-    }
-
-    @objc private func accessibilityDidChange() {
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
-                self.burstIcon?.stopBreathingAnimation()
-            } else if self.usageStore.isClaudeCodeActive {
-                self.burstIcon?.startBreathingAnimation()
-            }
-        }
     }
 
     // MARK: - Popover
@@ -202,7 +130,7 @@ final class StatusBarController: NSObject {
     }
 
     private func togglePopover(_ sender: Any?) {
-        guard let anchor = statusItem.button ?? statusItemContainer else { return }
+        guard let anchor = statusItem.button else { return }
 
         if popover.isShown {
             popover.performClose(sender)
@@ -221,12 +149,4 @@ final class StatusBarController: NSObject {
             }
         }
     }
-}
-
-// MARK: - Click-passthrough container
-
-/// Lets the hosting NSStatusBarButton receive the click by making
-/// this view (and all of its subviews) transparent to hit-testing.
-final class StatusItemContainerView: NSView {
-    override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }

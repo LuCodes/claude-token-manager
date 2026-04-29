@@ -10,6 +10,20 @@ final class BurstIconView: NSView {
 
     private let animationKey = "claudeBurstBreathing"
 
+    // Cache the last bounds the paths were generated for. Status bar items
+    // are resized whenever the percent label changes width — without this
+    // cache, every relayout rebuilt all three NSBezierPaths from scratch,
+    // and (worse) marked the menu bar item as needing a new shadow image,
+    // which goes through expensive vImage Gaussian convolution on macOS.
+    private var lastPathBounds: CGRect = .zero
+
+    // Discrete-step pulse driven by a Timer — see startBreathingAnimation()
+    // for why this replaced CAAnimation. Each tick toggles between full and
+    // dimmed opacity using CATransaction with actions disabled, so the
+    // change is instant and produces a single shadow regen per tick.
+    private var pulseTimer: Timer?
+    private var pulseDimmed: Bool = false
+
     /// When non-nil, overrides the appearance-driven `labelColor`.
     /// Useful inside dark surfaces like the dropdown header.
     var tintOverride: NSColor? {
@@ -54,9 +68,17 @@ final class BurstIconView: NSView {
         diagonalLayer.frame = bounds
         centerLayer.frame = bounds
 
-        crossLayer.path = makeCrossPath(in: bounds).compatCGPath
-        diagonalLayer.path = makeDiagonalPath(in: bounds).compatCGPath
-        centerLayer.path = makeCenterPath(in: bounds).compatCGPath
+        // Skip the path rebuild + shape-layer assignment when nothing about
+        // the icon's geometry changed. Reassigning a CAShapeLayer's path
+        // dirties the layer hierarchy and forces the menu bar to regenerate
+        // the status-item shadow image (Gaussian blur via vImage), which is
+        // the dominant CPU cost during a long Claude Code session.
+        guard bounds != lastPathBounds else { return }
+        lastPathBounds = bounds
+
+        crossLayer.path = Self.makeCrossPath(in: bounds).compatCGPath
+        diagonalLayer.path = Self.makeDiagonalPath(in: bounds).compatCGPath
+        centerLayer.path = Self.makeCenterPath(in: bounds).compatCGPath
     }
 
     override func viewDidChangeEffectiveAppearance() {
@@ -66,7 +88,26 @@ final class BurstIconView: NSView {
 
     // MARK: - Path generation
 
-    private func makeCrossPath(in bounds: CGRect) -> NSBezierPath {
+    /// Renders the burst icon as a template NSImage so it can be assigned to
+    /// `NSStatusItem.button.image`. Status bar items render their content
+    /// with a system-managed shadow pass; on macOS 26 a layer-backed custom
+    /// view in the menu bar triggers that pass at ~30 Hz, pinning ~one CPU
+    /// core. Drawing the icon as a flat template image avoids the entire
+    /// custom-view path while preserving the look (AppKit retints template
+    /// images to match the menu bar appearance).
+    static func renderTemplateImage(size: NSSize) -> NSImage {
+        let image = NSImage(size: size, flipped: false) { rect in
+            NSColor.black.setFill()
+            makeCrossPath(in: rect).fill()
+            makeDiagonalPath(in: rect).fill()
+            makeCenterPath(in: rect).fill()
+            return true
+        }
+        image.isTemplate = true
+        return image
+    }
+
+    static func makeCrossPath(in bounds: CGRect) -> NSBezierPath {
         let w = bounds.width
         let cx = w / 2
         let cy = bounds.height / 2
@@ -125,7 +166,7 @@ final class BurstIconView: NSView {
         return path
     }
 
-    private func makeDiagonalPath(in bounds: CGRect) -> NSBezierPath {
+    static func makeDiagonalPath(in bounds: CGRect) -> NSBezierPath {
         let w = bounds.width
         let cx = w / 2
         let cy = bounds.height / 2
@@ -166,7 +207,7 @@ final class BurstIconView: NSView {
         return path
     }
 
-    private func makeCenterPath(in bounds: CGRect) -> NSBezierPath {
+    static func makeCenterPath(in bounds: CGRect) -> NSBezierPath {
         let w = bounds.width
         let cx = w / 2
         let cy = bounds.height / 2
@@ -188,58 +229,30 @@ final class BurstIconView: NSView {
         if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
             return
         }
-        guard crossLayer.animation(forKey: animationKey) == nil else { return }
+        guard pulseTimer == nil else { return }
 
-        let totalDuration: CFTimeInterval = 2.4
-        let easing = CAMediaTimingFunction(name: .easeInEaseOut)
-        let timingFunctions = [easing, easing, easing, easing]
-
-        let crossOpacity = CAKeyframeAnimation(keyPath: "opacity")
-        crossOpacity.values = [1.0, 1.0, 1.0, 0.0, 1.0]
-        crossOpacity.keyTimes = [0.0, 0.25, 0.5, 0.75, 1.0]
-        crossOpacity.duration = totalDuration
-        crossOpacity.repeatCount = .infinity
-        crossOpacity.timingFunctions = timingFunctions
-
-        let crossScale = CAKeyframeAnimation(keyPath: "transform.scale")
-        crossScale.values = [1.0, 1.0, 1.0, 0.5, 1.0]
-        crossScale.keyTimes = [0.0, 0.25, 0.5, 0.75, 1.0]
-        crossScale.duration = totalDuration
-        crossScale.repeatCount = .infinity
-        crossScale.timingFunctions = timingFunctions
-
-        let crossGroup = CAAnimationGroup()
-        crossGroup.animations = [crossOpacity, crossScale]
-        crossGroup.duration = totalDuration
-        crossGroup.repeatCount = .infinity
-
-        crossLayer.add(crossGroup, forKey: animationKey)
-
-        let diagOpacity = CAKeyframeAnimation(keyPath: "opacity")
-        diagOpacity.values = [1.0, 0.0, 1.0, 1.0, 1.0]
-        diagOpacity.keyTimes = [0.0, 0.25, 0.5, 0.75, 1.0]
-        diagOpacity.duration = totalDuration
-        diagOpacity.repeatCount = .infinity
-        diagOpacity.timingFunctions = timingFunctions
-
-        let diagScale = CAKeyframeAnimation(keyPath: "transform.scale")
-        diagScale.values = [1.0, 0.5, 1.0, 1.0, 1.0]
-        diagScale.keyTimes = [0.0, 0.25, 0.5, 0.75, 1.0]
-        diagScale.duration = totalDuration
-        diagScale.repeatCount = .infinity
-        diagScale.timingFunctions = timingFunctions
-
-        let diagGroup = CAAnimationGroup()
-        diagGroup.animations = [diagOpacity, diagScale]
-        diagGroup.duration = totalDuration
-        diagGroup.repeatCount = .infinity
-
-        diagonalLayer.add(diagGroup, forKey: animationKey)
+        pulseDimmed = false
+        applyPulseOpacity(dimmed: false)
+        pulseTimer = Timer.scheduledTimer(withTimeInterval: 0.6, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            self.pulseDimmed.toggle()
+            self.applyPulseOpacity(dimmed: self.pulseDimmed)
+        }
     }
 
     func stopBreathingAnimation() {
-        crossLayer.removeAnimation(forKey: animationKey)
-        diagonalLayer.removeAnimation(forKey: animationKey)
+        pulseTimer?.invalidate()
+        pulseTimer = nil
+        applyPulseOpacity(dimmed: false)
+    }
+
+    private func applyPulseOpacity(dimmed: Bool) {
+        let target: Float = dimmed ? 0.35 : 1.0
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        crossLayer.opacity = target
+        diagonalLayer.opacity = target
+        CATransaction.commit()
     }
 
     // MARK: - Tint
