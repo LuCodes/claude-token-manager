@@ -105,6 +105,19 @@ public final class HistoryAggregator: ObservableObject {
     public func ingest(events: [ActivityEvent]) {
         guard !events.isEmpty else { return }
 
+        // Skip the bucket rebuild + persist + hourly recompute when the
+        // event set is identical to what we just ingested. Refresh fires
+        // for any FSEvent under ~/.claude/projects/, including ones that
+        // produce no new assistant messages (user prompts, tool turns,
+        // sidechains). Fingerprinting by (count, last-event date) catches
+        // the no-change case cheaply.
+        let lastDate = events.last?.date
+        if events.count == lastIngestedCount, lastDate == lastIngestedLastDate {
+            return
+        }
+        lastIngestedCount = events.count
+        lastIngestedLastDate = lastDate
+
         let dayFormatter = Self.dayKeyFormatter
         var freshDaily: [String: DailyBucket] = [:]
         for e in events {
@@ -129,6 +142,9 @@ public final class HistoryAggregator: ObservableObject {
 
         hourlyTodayBuckets = Self.computeHourlyToday(events: events)
     }
+
+    private var lastIngestedCount: Int = 0
+    private var lastIngestedLastDate: Date? = nil
 
     /// Daily history bounded to the most recent `days` days, sorted oldest → newest.
     public func recentDailyHistory(days: Int) -> [DailyBucket] {

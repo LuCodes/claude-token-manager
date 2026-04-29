@@ -18,10 +18,35 @@ public struct ProjectDisplayInfo: Hashable, Identifiable {
 
     public init(rawName: String) {
         self.rawName = rawName
-        self.displayName = Self.extractDisplayName(from: rawName)
+        self.displayName = Self.cachedDisplayName(for: rawName)
     }
 
-    private static func extractDisplayName(from rawName: String) -> String {
+    // Resolving a display name reads the first JSONL file of the project to
+    // find a `cwd` field. JSONL files can be tens of MB, and refreshes happen
+    // on every FSEvent — without this cache, refreshAvailableProjects() was
+    // dominating the main thread (>95% of samples) and driving baseline CPU
+    // toward 50%. The mapping rawName → displayName is stable for the
+    // lifetime of the app, so a permanent in-memory cache is correct.
+    private static var displayNameCache: [String: String] = [:]
+    private static let displayNameCacheLock = NSLock()
+
+    private static func cachedDisplayName(for rawName: String) -> String {
+        displayNameCacheLock.lock()
+        if let cached = displayNameCache[rawName] {
+            displayNameCacheLock.unlock()
+            return cached
+        }
+        displayNameCacheLock.unlock()
+
+        let resolved = resolveDisplayName(from: rawName)
+
+        displayNameCacheLock.lock()
+        displayNameCache[rawName] = resolved
+        displayNameCacheLock.unlock()
+        return resolved
+    }
+
+    private static func resolveDisplayName(from rawName: String) -> String {
         guard rawName.hasPrefix("-") else { return rawName }
 
         // Read cwd from jsonl files in this project folder
@@ -412,6 +437,15 @@ final class FileWatcher {
     private let callback: () -> Void
     private var stream: FSEventStreamRef?
 
+    // Leading-edge throttle: a burst of FSEvents (e.g. multiple JSONL files
+    // updated during a single Claude Code turn) collapses into one callback
+    // every `coalesceInterval`. The macOS FSEvents latency already coarse-
+    // grains writes to ~1s, but we add another layer here so the followup
+    // tasks (re-scanning all logs, refreshing display info) don't run more
+    // often than they need to.
+    private let coalesceInterval: TimeInterval = 0.25
+    private var fireScheduled = false
+
     init(url: URL, callback: @escaping () -> Void) {
         self.url = url
         self.callback = callback
@@ -429,7 +463,7 @@ final class FileWatcher {
             kCFAllocatorDefault,
             { (_, info, _, _, _, _) in
                 guard let info else { return }
-                Unmanaged<FileWatcher>.fromOpaque(info).takeUnretainedValue().callback()
+                Unmanaged<FileWatcher>.fromOpaque(info).takeUnretainedValue().scheduleFire()
             },
             &context, pathsToWatch,
             FSEventStreamEventId(kFSEventStreamEventIdSinceNow), 1.0, flags
@@ -437,6 +471,16 @@ final class FileWatcher {
         guard let stream else { return }
         FSEventStreamSetDispatchQueue(stream, .main)
         FSEventStreamStart(stream)
+    }
+
+    fileprivate func scheduleFire() {
+        if fireScheduled { return }
+        fireScheduled = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + coalesceInterval) { [weak self] in
+            guard let self else { return }
+            self.fireScheduled = false
+            self.callback()
+        }
     }
 
     func stop() {
