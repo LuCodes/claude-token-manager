@@ -185,6 +185,13 @@ final class StatusBarController: NSObject {
             .frame(width: 380, height: 520, alignment: .top)
 
         let host = NSHostingController(rootView: rootView)
+        // Opt out of NSHostingController's default sizingOptions, which sync
+        // preferredContentSize from SwiftUI's intrinsic content size. On
+        // macOS 14+ the intrinsic height of DropdownView (header + un-scrolled
+        // body + footer ≈ 1000pt+) bubbled up as the popover's preferred size,
+        // pushing the popover off-screen so only the footer remained visible.
+        host.sizingOptions = []
+        host.preferredContentSize = NSSize(width: 380, height: 520)
         host.view.frame = NSRect(x: 0, y: 0, width: 380, height: 520)
         popover.contentViewController = host
         popover.contentSize = NSSize(width: 380, height: 520)
