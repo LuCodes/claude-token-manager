@@ -38,13 +38,16 @@ struct DropdownView: View {
                     .padding(.top, 16)
                     .padding(.bottom, 14)
 
-                    // Scrollable body — overflow handled here so the footer
-                    // (Refresh / Logs / Quit) never gets clipped off-screen.
-                    // Switching is driven by isAuthenticated, not by whether
-                    // any pool is non-zero: a freshly-reset week returns
-                    // pools at 0 % or null, and the user should still see the
-                    // claude.ai layout, not fall back to the local view.
-                    ScrollView(.vertical, showsIndicators: false) {
+                    // Scrollable body wrapped in AutoHeightScrollView: when
+                    // the natural height of all sections fits under
+                    // `maxScrollHeight`, no scrolling happens and there is
+                    // no empty bottom band — the popover resizes to exactly
+                    // fit. When content exceeds that cap (extreme case on
+                    // a small screen), the body scrolls while the top
+                    // chrome and the footer stay pinned.
+                    AutoHeightScrollView(
+                        maxHeight: PopoverSizing.maxScrollHeight(chromeHeight: 200)
+                    ) {
                         VStack(alignment: .leading, spacing: 0) {
                             if webSession.isAuthenticated {
                                 remoteBarsSection
@@ -74,6 +77,8 @@ struct DropdownView: View {
                 staleTick &+= 1
             }
         }
+        .frame(width: PopoverSizing.width)
+        .reportingContentHeight()
     }
 
     @ViewBuilder

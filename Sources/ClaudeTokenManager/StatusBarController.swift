@@ -103,26 +103,61 @@ final class StatusBarController: NSObject {
 
     // MARK: - Popover
 
+    private var heightPropagatorHost: NSHostingController<AnyView>?
+
     private func setupPopover() {
         popover = NSPopover()
         popover.behavior = .semitransient
         popover.animates = true
 
-        let rootView = DropdownView()
-            .environmentObject(usageStore)
-            .frame(width: 380, height: 520, alignment: .top)
+        // Bridge the SwiftUI ContentHeightPreferenceKey emitted by each
+        // popover view (Dropdown / History / Preferences) into popover
+        // sizing. Each view sets `.frame(width: 380).fixedSize(vertical:
+        // true).reportingContentHeight()`, so the value we receive is the
+        // exact natural height of the currently-visible screen.
+        let rootView = AnyView(
+            DropdownView()
+                .environmentObject(usageStore)
+                .onPreferenceChange(ContentHeightPreferenceKey.self) { [weak self] height in
+                    self?.applyContentHeight(height)
+                }
+        )
 
         let host = NSHostingController(rootView: rootView)
-        // Opt out of NSHostingController's default sizingOptions, which sync
-        // preferredContentSize from SwiftUI's intrinsic content size. On
-        // macOS 14+ the intrinsic height of DropdownView (header + un-scrolled
-        // body + footer ≈ 1000pt+) bubbled up as the popover's preferred size,
-        // pushing the popover off-screen so only the footer remained visible.
+        // Keep `sizingOptions = []` so NSHostingController never overrides
+        // preferredContentSize from SwiftUI intrinsic — we drive the size
+        // ourselves through `applyContentHeight`. Initial guess matches
+        // the historical fixed value so the first frame is visually close
+        // to the final layout.
         host.sizingOptions = []
-        host.preferredContentSize = NSSize(width: 380, height: 520)
-        host.view.frame = NSRect(x: 0, y: 0, width: 380, height: 520)
+        host.preferredContentSize = NSSize(width: PopoverSizing.width, height: 520)
+        host.view.frame = NSRect(x: 0, y: 0, width: PopoverSizing.width, height: 520)
+        heightPropagatorHost = host
         popover.contentViewController = host
-        popover.contentSize = NSSize(width: 380, height: 520)
+        popover.contentSize = NSSize(width: PopoverSizing.width, height: 520)
+    }
+
+    /// Reflects the active SwiftUI screen's natural height into the
+    /// popover, clamped to `[PopoverSizing.minHeight, PopoverSizing.maxHeight]`.
+    /// During the breakdown's open/close animation in HistoryView this
+    /// fires at every interpolated frame; the early-out on a 1pt threshold
+    /// stops a runaway feedback where each apply triggers another layout
+    /// pass that re-publishes the same value.
+    private func applyContentHeight(_ proposed: CGFloat) {
+        guard proposed > 0 else { return }
+        let clamped = min(PopoverSizing.maxHeight, max(PopoverSizing.minHeight, proposed))
+        let target = NSSize(width: PopoverSizing.width, height: clamped)
+        if abs(popover.contentSize.height - target.height) < 1 { return }
+
+        // NSPopover animates contentSize on its own when `popover.animates`
+        // is true; wrapping the assignment in NSAnimationContext is
+        // redundant and (in practice on macOS 26) prevents the new value
+        // from sticking once the popover is already shown. Mirroring the
+        // same size into `host.preferredContentSize` keeps it pinned across
+        // close/reopen cycles, so the popover comes back at the screen's
+        // last height instead of resetting to the 520pt initial guess.
+        popover.contentSize = target
+        heightPropagatorHost?.preferredContentSize = target
     }
 
     @objc private func buttonClicked(_ sender: Any?) {

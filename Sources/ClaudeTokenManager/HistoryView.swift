@@ -30,7 +30,13 @@ struct HistoryView: View {
                 .padding(.top, 16)
                 .padding(.bottom, 10)
 
-            ScrollView(.vertical, showsIndicators: false) {
+            // Header above stays fixed; only this region scrolls when the
+            // body's natural height (which grows when the breakdown
+            // disclosure is expanded) would push the popover past the
+            // screen-bound max.
+            AutoHeightScrollView(
+                maxHeight: PopoverSizing.maxScrollHeight(chromeHeight: 80)
+            ) {
                 VStack(alignment: .leading, spacing: 14) {
                     currentSessionSection
                     periodSection
@@ -43,6 +49,8 @@ struct HistoryView: View {
         }
         .background(bg)
         .foregroundColor(fg)
+        .frame(width: PopoverSizing.width)
+        .reportingContentHeight()
         .onAppear {
             Task {
                 let events = await Task.detached(priority: .userInitiated) {

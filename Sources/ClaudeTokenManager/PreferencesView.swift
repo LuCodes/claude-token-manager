@@ -41,7 +41,12 @@ struct PreferencesView: View {
                 .padding(.top, 16)
                 .padding(.bottom, 10)
 
-            ScrollView(.vertical, showsIndicators: false) {
+            // Body sizes to its natural height under the screen-bound cap;
+            // only the cards region scrolls if the popover would otherwise
+            // push past the screen edge. The footer below stays pinned.
+            AutoHeightScrollView(
+                maxHeight: PopoverSizing.maxScrollHeight(chromeHeight: 130)
+            ) {
                 VStack(alignment: .leading, spacing: 10) {
                     budgetCard
                     launchAtLoginCard
@@ -61,6 +66,8 @@ struct PreferencesView: View {
         }
         .background(Color(red: 31/255, green: 31/255, blue: 30/255))
         .foregroundColor(Color(red: 241/255, green: 239/255, blue: 232/255))
+        .frame(width: PopoverSizing.width)
+        .reportingContentHeight()
     }
 
     // MARK: - Header
